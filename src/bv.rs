@@ -1,11 +1,13 @@
 use crate::btor::Bitwuzla;
 use crate::sort::Sort;
-use crate::{Bool, FP};
+use crate::{Bool, SolverResult, FP};
 use bitwuzla_sys::*;
 use std::borrow::Borrow;
+use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::os::raw::c_char;
+use std::rc::Rc;
 
 /// A bitvector object: that is, a single symbolic value, consisting of some
 /// number of symbolic bits.
@@ -49,6 +51,7 @@ macro_rules! binop {
     ( $(#[$attr:meta])* => $f:ident, $kind:ident ) => {
         $(#[$attr])*
         pub fn $f(&self, other: &Self) -> Self {
+            //println!("BINOP! {:?} {} {:?}",self,stringify!($kind),other);
             let tm = self.btor.borrow().tm;
             Self {
                 btor: self.btor.clone(),
@@ -63,7 +66,7 @@ macro_rules! binop {
 macro_rules! binop_cmp {
     ( $(#[$attr:meta])* => $f:ident, $kind:ident ) => {
         $(#[$attr])*
-        pub fn $f(&self, other: &Self) -> Bool<R> {
+        pub fn $f(&self, other: &Self) -> Bool<R>{
             let tm = self.btor.borrow().tm;
             Bool {
                 btor: self.btor.clone(),
@@ -210,6 +213,48 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         }
     }
 
+    /// Create the constant `1` of the given width.
+    /// This is equivalent to `from_i32(btor, 1, width)`, but may be more efficient.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use bitwuzla::{Btor, BV};
+    /// # use std::rc::Rc;
+    /// let btor = Rc::new(Btor::new());
+    /// let one = BV::one(btor.clone(), 8);
+    /// assert_eq!(one.as_u64().unwrap(), 1);
+    /// ```
+    pub fn max_signed(btor: R, width: u64) -> Self {
+        let tm = btor.borrow().tm;
+        let sort = Sort::bitvector(btor.clone(), width);
+        Self {
+            node: unsafe { bitwuzla_mk_bv_max_signed(tm, sort.as_raw()) },
+            btor, // out of order so it can be used above but moved in here
+        }
+    }
+
+    /// Create the constant `1` of the given width.
+    /// This is equivalent to `from_i32(btor, 1, width)`, but may be more efficient.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use bitwuzla::{Btor, BV};
+    /// # use std::rc::Rc;
+    /// let btor = Rc::new(Btor::new());
+    /// let one = BV::one(btor.clone(), 8);
+    /// assert_eq!(one.as_u64().unwrap(), 1);
+    /// ```
+    pub fn min_signed(btor: R, width: u64) -> Self {
+        let tm = btor.borrow().tm;
+        let sort = Sort::bitvector(btor.clone(), width);
+        Self {
+            node: unsafe { bitwuzla_mk_bv_min_signed(tm, sort.as_raw()) },
+            btor, // out of order so it can be used above but moved in here
+        }
+    }
+
     /// Create a bitvector constant of the given width, where all bits are set to one.
     /// This is equivalent to `from_i32(btor, -1, width)`, but may be more efficient.
     ///
@@ -277,44 +322,6 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         }
     }
 
-    /// Get the value of the `BV` as a string of '0's and '1's. This method is
-    /// only effective for `BV`s which are constant, as indicated by
-    /// [`BV::is_const()`](struct.BV.html#method.is_const).
-    ///
-    /// This method does not require the current state to be satisfiable. To get
-    /// the value of nonconstant `BV` objects given the current constraints, see
-    /// [`get_a_solution()`](struct.BV.html#method.get_a_solution), which does
-    /// require that the current state be satisfiable.
-    ///
-    /// Returns `None` if the `BV` is not constant.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use bitwuzla::{Btor, BV};
-    /// # use std::rc::Rc;
-    /// let btor = Rc::new(Btor::new());
-    ///
-    /// // This `BV` is constant, so we get a `Some`
-    /// let five = BV::from_u32(btor.clone(), 5, 8);
-    /// assert_eq!(five.as_binary_str(), Some("00000101".to_owned()));
-    ///
-    /// // This `BV` is not constant, so we get `None`
-    /// let unconstrained = BV::new(btor.clone(), 8, Some("foo"));
-    /// assert_eq!(unconstrained.as_binary_str(), None);
-    /// ```
-    pub fn as_binary_str(&self) -> Option<String> {
-        if self.is_const() {
-            let string = unsafe { CStr::from_ptr(bitwuzla_term_to_string_fmt(self.node, 2)) };
-            let string = string.to_string_lossy();
-            assert!(string.starts_with("#b"));
-            let string = string[2 ..].to_string();
-            Some(string)
-        } else {
-            None
-        }
-    }
-
     /// Get the value of the `BV` as a `u64`. This method is only effective for
     /// `BV`s which are constant, as indicated by
     /// [`BV::is_const()`](struct.BV.html#method.is_const).
@@ -343,12 +350,13 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
     /// assert_eq!(unconstrained.as_u64(), None);
     /// ```
     pub fn as_u64(&self) -> Option<u64> {
-        if self.is_const() {
-            let binary_string = self.as_binary_str()?;
-            Some(u64::from_str_radix(&binary_string, 2).unwrap())
-        } else {
-            None
-        }
+        //if self.is_const() {
+        //    let binary_string = self.as_binary_str()?;
+        //    Some(u64::from_str_radix(&binary_string, 2).unwrap())
+        //} else {
+        //    None
+        //}
+        todo!()
     }
 
     /// Get the value of the `BV` as a `bool`. This method is only effective for
@@ -359,17 +367,18 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
     /// the `BV` has a constant zero value.
     /// Returns `None` if the `BV` is not constant.
     pub fn as_bool(&self) -> Option<bool> {
-        if self.is_const() {
-            let binary_string = self.as_binary_str()?;
-            for c in binary_string.chars() {
-                if c != '0' {
-                    return Some(true);
-                }
-            }
-            Some(false)
-        } else {
-            None
-        }
+        //if self.is_const() {
+        //    let binary_string = self.as_binary_str()?;
+        //    for c in binary_string.chars() {
+        //        if c != '0' {
+        //            return Some(true);
+        //        }
+        //    }
+        //    Some(false)
+        //} else {
+        //    None
+        //}
+        todo!()
     }
 
     /// Get a solution for the `BV` according to the current model.
@@ -391,7 +400,6 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let bv_str = unsafe { bitwuzla_term_value_get_str(bv_val) };
         BVSolution::from_raw(bv_str)
     }
-
     /// Get the `Btor` which this `BV` belongs to
     pub fn get_btor(&self) -> R {
         self.btor.clone()
@@ -562,43 +570,43 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         => neg, BITWUZLA_KIND_BV_NEG
     );
 
-    binop!(
+    binop_cmp!(
         /// Unsigned addition overflow detection. Resulting `BV` will have bitwidth
         /// one, and be `true` if adding `self` and `other` would overflow when
         /// interpreting both `self` and `other` as unsigned.
         => uaddo, BITWUZLA_KIND_BV_UADD_OVERFLOW
     );
-    binop!(
+    binop_cmp!(
         /// Signed addition overflow detection. Resulting `BV` will have bitwidth
         /// one, and be `true` if adding `self` and `other` would overflow when
         /// interpreting both `self` and `other` as signed.
         => saddo, BITWUZLA_KIND_BV_SADD_OVERFLOW
     );
-    binop!(
+    binop_cmp!(
         /// Unsigned subtraction overflow detection. Resulting `BV` will have bitwidth
         /// one, and be `true` if subtracting `self` and `other` would overflow when
         /// interpreting both `self` and `other` as unsigned.
         => usubo, BITWUZLA_KIND_BV_USUB_OVERFLOW
     );
-    binop!(
+    binop_cmp!(
         /// Signed subtraction overflow detection. Resulting `BV` will have bitwidth
         /// one, and be `true` if subtracting `self` and `other` would overflow when
         /// interpreting both `self` and `other` as signed.
         => ssubo, BITWUZLA_KIND_BV_SSUB_OVERFLOW
     );
-    binop!(
+    binop_cmp!(
         /// Unsigned multiplication overflow detection. Resulting `BV` will have
         /// bitwidth 1, and be `true` if multiplying `self` and `other` would
         /// overflow when interpreting both `self` and `other` as unsigned.
         => umulo, BITWUZLA_KIND_BV_UMUL_OVERFLOW
     );
-    binop!(
+    binop_cmp!(
         /// Signed multiplication overflow detection. Resulting `BV` will have
         /// bitwidth 1, and be `true` if multiplying `self` and `other` would
         /// overflow when interpreting both `self` and `other` as signed.
         => smulo, BITWUZLA_KIND_BV_SMUL_OVERFLOW
     );
-    binop!(
+    binop_cmp!(
         /// Signed division overflow detection. Resulting `BV` will have bitwidth
         /// one, and be `true` if dividing `self` by `other` would overflow when
         /// interpreting both `self` and `other` as signed.
@@ -875,12 +883,12 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         }
     }
 
-    pub fn to_bool(&self) -> Bool<R> {
-        debug_assert_eq!(self.get_width(), 1);
-        let one = Self::from_u32(self.btor.clone(), 1, 1);
-        self._eq(&one)
-    }
-
+    //pub fn to_bool(&self) -> Bool<R> {
+    //    debug_assert_eq!(self.get_width(), 1);
+    //    let one = Self::from_u32(self.btor.clone(), 1, 1);
+    //    self._eq(&one)
+    //}
+    //
     pub fn to_fp32(&self) -> FP<R> {
         self.to_fp(8, 23 + 1)
     }
@@ -903,6 +911,93 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
                 )
             },
         }
+    }
+
+    pub fn cond_bv(&self, t: &BV<R>, e: &BV<R>) -> Self {
+        let tm = self.btor.borrow().tm;
+        Self {
+            btor: self.btor.clone(),
+            node: unsafe { bitwuzla_mk_term3(tm, BITWUZLA_KIND_ITE, self.node, t.node, e.node) },
+        }
+    }
+}
+
+impl<R: AsRef<Bitwuzla> + Clone + Borrow<Bitwuzla>> BV<R> {
+    /// Get the value of the `BV` as a string of '0's and '1's. This method is
+    /// only effective for `BV`s which are constant, as indicated by
+    /// [`BV::is_const()`](struct.BV.html#method.is_const).
+    ///
+    /// This method does not require the current state to be satisfiable. To get
+    /// the value of nonconstant `BV` objects given the current constraints, see
+    /// [`get_a_solution()`](struct.BV.html#method.get_a_solution), which does
+    /// require that the current state be satisfiable.
+    ///
+    /// Returns `None` if the `BV` is not constant.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use bitwuzla::{Btor, BV};
+    /// # use std::rc::Rc;
+    /// let btor = Rc::new(Btor::new());
+    ///
+    /// // This `BV` is constant, so we get a `Some`
+    /// let five = BV::from_u32(btor.clone(), 5, 8);
+    /// assert_eq!(five.as_binary_str(), Some("00000101".to_owned()));
+    ///
+    /// // This `BV` is not constant, so we get `None`
+    /// let unconstrained = BV::new(btor.clone(), 8, Some("foo"));
+    /// assert_eq!(unconstrained.as_binary_str(), None);
+    /// ```
+    pub fn as_binary_str(&self) -> Option<String> {
+        let sols = self.get_solutions(2);
+        if sols.len() != 1 {
+            return None;
+        }
+
+        let sol = sols[0].clone();
+        let sol = sol.deterministic()?;
+
+        Some(sol.as_01x_str().to_string())
+
+        //self.btor.as_ref().push(1);
+        //let _ = self.btor.as_ref().sat();
+        //let ret = if self.is_const() {
+        //    println!("Was const :)");
+        //    let raw = unsafe { bitwuzla_term_value_get_str_fmt(self.node, 2) };
+        //    let cstr = unsafe { CStr::from_ptr(raw) };
+        //    let string = cstr.to_str().unwrap().to_owned();
+        //    //unsafe { boolector_free_bits(self.btor.borrow().as_raw(), raw) };
+        //    Some(string)
+        //} else {
+        //    None
+        //};
+        //self.btor.as_ref().pop(1);
+        //ret
+    }
+
+    pub fn get_solutions(&self, limit: usize) -> Vec<BVSolution> {
+        self.btor.as_ref().push(1);
+        let mut ret: HashSet<BVSolution> = HashSet::new();
+        for _ in 0 .. limit {
+            if !self.btor.as_ref().is_sat() {
+                break;
+            }
+            let sol = self.get_a_solution();
+            self._ne(&BV::from_binary_str(
+                self.btor.clone(),
+                sol.clone().disambiguate().as_01x_str(),
+            ))
+            .assert();
+
+            if !ret.insert(sol) {
+                // No need to continue, we have collected all variants.
+                break;
+            }
+        }
+        self.btor.as_ref().pop(1);
+
+        ret.iter().cloned().collect::<Vec<_>>()
     }
 }
 
@@ -997,6 +1092,21 @@ impl BVSolution {
                 })
                 .collect(),
         }
+    }
+
+    /// Get a version of this `BVSolution` that is guaranteed to correspond to
+    /// exactly one possible value. For instance,
+    /// [`as_01x_str()`](struct.BVSolution.html#method.as_01x_str) on the
+    /// resulting `BVSolution` will contain no `x`s.
+    ///
+    /// In the event that the input `BVSolution` did represent multiple possible
+    /// values (see [`as_01x_str()`](struct.BVSolution.html#method.as_01x_str)),
+    /// this will simply choose one possible value arbitrarily.
+    pub fn deterministic(self) -> Option<Self> {
+        if self.as_01x_str().contains('x') {
+            return None;
+        }
+        Some(self)
     }
 
     /// Get a `u64` value for the `BVSolution`. In the event that this

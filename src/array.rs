@@ -58,14 +58,16 @@ impl<R: Borrow<Bitwuzla> + Clone> Array<R> {
         let tm = btor.borrow().tm;
         let index_sort = Sort::bitvector(btor.clone(), index_width);
         let element_sort = Sort::bitvector(btor.clone(), element_width);
-        let array_sort = Sort::array(btor.clone(), &index_sort, &element_sort);
+        //let array_sort = Sort::array(btor.clone(), &index_sort, &element_sort);
+        let kind =
+            unsafe { bitwuzla_mk_array_sort(tm, index_sort.as_raw(), element_sort.as_raw()) };
 
         let node = match symbol {
-            None => unsafe { bitwuzla_mk_const(tm, array_sort.as_raw(), std::ptr::null()) },
+            None => unsafe { bitwuzla_mk_const(tm, kind, CString::new("").unwrap().as_ptr()) },
             Some(symbol) => {
                 let cstring = CString::new(symbol).unwrap();
                 let symbol = cstring.as_ptr() as *const libc::c_char;
-                unsafe { bitwuzla_mk_const(tm, array_sort.as_raw(), symbol) }
+                unsafe { bitwuzla_mk_var(tm, kind, symbol) }
             },
         };
         Self { btor, node }

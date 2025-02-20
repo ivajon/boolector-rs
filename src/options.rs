@@ -5,6 +5,7 @@ use bitwuzla_sys::{
     bitwuzla_options_new,
     bitwuzla_set_option,
     bitwuzla_set_option_mode,
+    BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST,
     BITWUZLA_OPT_PRODUCE_MODELS,
     BITWUZLA_OPT_PRODUCE_UNSAT_ASSUMPTIONS,
     BITWUZLA_OPT_TIME_LIMIT_PER,
@@ -69,13 +70,15 @@ impl BitwuzlaOptions {
             SolverEngine::Quant => "quant",
         };
         let val = CString::new(val).unwrap();
+        println!("Setting solver!");
         unsafe {
             bitwuzla_set_option_mode(
                 self.as_raw(),
                 bitwuzla_sys::BITWUZLA_OPT_BV_SOLVER,
-                val.as_ptr(),
+                val.as_c_str().as_ptr(),
             );
         }
+        println!("Set solver!");
         self
     }
 
@@ -126,6 +129,17 @@ impl BitwuzlaOptions {
         self
     }
 
+    pub fn n_threads(mut self, threads: usize) -> Self {
+        unsafe {
+            bitwuzla_set_option(
+                self.as_raw(),
+                bitwuzla_sys::BITWUZLA_OPT_NTHREADS,
+                threads as u64,
+            )
+        };
+        self
+    }
+
     pub fn produce_unsat_assumptions(mut self, v: bool) -> Self {
         unsafe {
             bitwuzla_set_option(
@@ -134,6 +148,11 @@ impl BitwuzlaOptions {
                 v as u64,
             );
         }
+        self
+    }
+
+    pub fn incremental(mut self) -> Self {
+        unsafe { bitwuzla_set_option(self.as_raw(), BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, 1) };
         self
     }
 }

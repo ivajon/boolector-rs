@@ -34,9 +34,12 @@ impl fmt::Debug for Bitwuzla {
 impl Bitwuzla {
     /// Create a new `Bitwuzla` instance with no variables and no constraints.
     ///
-    /// TODO: document bitwuzlaoptions, note that this defaults to model gen
+    /// TODO: document bitwuzla options, note that this defaults to model gen
     pub fn new() -> Self {
-        crate::BitwuzlaOptions::new().with_model_gen().build()
+        crate::BitwuzlaOptions::new()
+            .with_model_gen()
+            .n_threads(10)
+            .build()
     }
 
     pub fn builder() -> crate::BitwuzlaOptions {
@@ -104,6 +107,11 @@ impl Bitwuzla {
         SolverResult::from_raw(result)
     }
 
+    pub fn is_sat(&self) -> bool {
+        let result = unsafe { bitwuzla_check_sat(self.as_raw()) };
+        SolverResult::from_raw(result) == SolverResult::Sat
+    }
+
     /// TODO
     /// ```
     /// # use bitwuzla::{Btor, BV, SolverResult};
@@ -122,7 +130,7 @@ impl Bitwuzla {
     /// ```
     pub fn check_sat_assuming<R: Borrow<Bitwuzla> + Clone>(
         &self,
-        assumptions: &[crate::Bool<R>],
+        assumptions: &[crate::BV<R>],
     ) -> SolverResult {
         let assumptions = assumptions.iter().map(|x| x.node).collect::<Vec<_>>();
         let result = unsafe {
@@ -263,6 +271,16 @@ impl Bitwuzla {
             },
             false,
         )
+    }
+
+    pub fn from_formula(_formula: &str) -> Option<Bitwuzla> {
+        // T=OP
+        //
+        todo!("call https://bitwuzla.github.io/docs/c/types/bitwuzlaparser.html#_CPPv421bitwuzla_parser_parseP14BitwuzlaParserPKcbbPPKc");
+    }
+
+    pub fn deep_clone(&self) -> Option<Self> {
+        todo!()
     }
 
     /// Get a `String` describing the current model, including a set of

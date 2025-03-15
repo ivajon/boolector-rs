@@ -508,6 +508,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
     /// assert_eq!(btor.sat(), SolverResult::Unsat);
     /// ```
     pub fn assert(&self) {
+        println!("Asserting {self:?} != 0");
         let zero = Self::from_u32(self.btor.clone(), 0, self.get_width());
         self._ne(&zero).assert();
     }

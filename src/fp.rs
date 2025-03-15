@@ -10,13 +10,39 @@ use std::ffi::CString;
 use std::fmt;
 use std::os::raw::c_char;
 
+/// Enumerates the errors that may occur when using these bindings.
+///
+/// # Note
+///
+/// These do not cover internal bitwuzla errors.
+#[derive(Clone, Debug)]
+pub enum FPError {
+    InvalidIdentifier,
+}
 // The attr:meta stuff is so that doc comments work correctly.
 // See https://stackoverflow.com/questions/41361897/documenting-a-function-created-with-a-macro-in-rust
 macro_rules! unop {
     ( $(#[$attr:meta])* => $f:ident, $kind:ident ) => {
         $(#[$attr])*
+        pub fn $f(&self,rounding_mode:RoundingMode) -> Self {
+            let tm = self.btor.borrow().tm;
+            let rm = rounding_mode.to_node(self.btor.clone());
+
+            Self {
+                btor: self.btor.clone(),
+                node: unsafe { bitwuzla_mk_term2(tm, $kind, rm.node, self.node) },
+            }
+        }
+    };
+}
+// The attr:meta stuff is so that doc comments work correctly.
+// See https://stackoverflow.com/questions/41361897/documenting-a-function-created-with-a-macro-in-rust
+macro_rules! unop_non_rounding {
+    ( $(#[$attr:meta])* => $f:ident, $kind:ident ) => {
+        $(#[$attr])*
         pub fn $f(&self) -> Self {
             let tm = self.btor.borrow().tm;
+
             Self {
                 btor: self.btor.clone(),
                 node: unsafe { bitwuzla_mk_term1(tm, $kind, self.node) },
@@ -57,6 +83,21 @@ macro_rules! binop {
 
 // The attr:meta stuff is so that doc comments work correctly.
 // See https://stackoverflow.com/questions/41361897/documenting-a-function-created-with-a-macro-in-rust
+macro_rules! trinop {
+    ( $(#[$attr:meta])* => $f:ident, $kind:ident ) => {
+        $(#[$attr])*
+        pub fn $f(&self, second: &Self,third:&Self, rounding_mode: RoundingMode) -> Self {
+            let tm = self.btor.borrow().tm;
+            Self {
+                btor: self.btor.clone(),
+                node:  todo!("Trinary operations with rounding modes!")//unsafe { bitwuzla_mk_term(tm, $kind, self.node, second.node, third.node) },
+            }
+        }
+    };
+}
+
+// The attr:meta stuff is so that doc comments work correctly.
+// See https://stackoverflow.com/questions/41361897/documenting-a-function-created-with-a-macro-in-rust
 macro_rules! binop_cmp {
     ( $(#[$attr:meta])* => $f:ident, $kind:ident ) => {
         $(#[$attr])*
@@ -84,6 +125,34 @@ macro_rules! ternop {
             }
         }
     };
+}
+
+/// Enumerates the supported FP formats.
+pub enum Formats {
+    F16,
+    F32,
+    F64,
+    F128,
+}
+
+impl Formats {
+    fn fraction(&self) -> u64 {
+        match self {
+            Self::F16 => 10,
+            Self::F32 => 23,
+            Self::F64 => 53,
+            Self::F128 => 113,
+        }
+    }
+
+    fn exponent(&self) -> u64 {
+        match self {
+            Self::F128 => 128 - self.fraction() - 1,
+            Self::F64 => 64 - self.fraction() - 1,
+            Self::F32 => 32 - self.fraction() - 1,
+            Self::F16 => 16 - self.fraction() - 1,
+        }
+    }
 }
 
 /// A floating-point object: that is, a single symbolic value, consisting of a
@@ -122,26 +191,18 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
     /// // let solution = fp.get_a_solution().as_u64().unwrap();
     /// // assert!(solution > 3);
     /// ```
-    pub fn new(btor: R, exp_width: u64, sig_width: u64, symbol: Option<&str>) -> Self {
+    pub fn new(btor: R, ty: Formats, symbol: Option<&str>) -> Result<Self, FPError> {
         let tm = btor.borrow().tm;
-        let sort = Sort::fp(btor.clone(), exp_width, sig_width);
+        let sort = Sort::fp(btor.clone(), ty.exponent(), ty.fraction());
         let node = match symbol {
             None => unsafe { bitwuzla_mk_const(tm, sort.as_raw(), std::ptr::null()) },
             Some(symbol) => {
-                let cstring = CString::new(symbol).unwrap();
+                let cstring = CString::new(symbol).map_err(|_| FPError::InvalidIdentifier)?;
                 let symbol = cstring.as_ptr() as *const c_char;
                 unsafe { bitwuzla_mk_const(tm, sort.as_raw(), symbol) }
             },
         };
-        Self { btor, node }
-    }
-
-    pub fn new_binary32(btor: R, symbol: Option<&str>) -> Self {
-        Self::new(btor, 8, 23 + 1, symbol)
-    }
-
-    pub fn new_binary64(btor: R, symbol: Option<&str>) -> Self {
-        Self::new(btor, 11, 52 + 1, symbol)
+        Ok(Self { btor, node })
     }
 
     /// Create a new constant `FP` representing the given floating point value.
@@ -154,6 +215,16 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
     /// The new `FP` represents an IEEE 754 binary64 value.
     pub fn from_f64(btor: R, val: f64) -> Self {
         BV::from_u64(btor, val.to_bits(), 64).to_fp(11, 52 + 1)
+    }
+
+    /// Create a new constant `FP` representing the given floating point value.
+    /// The new `FP` represents an IEEE 754 binary64 value.
+    pub fn new_from_f64(btor: R, val: f64, ty: Formats) -> Self {
+        BV::from_u64(btor, val.to_bits(), 64).to_fp(ty.exponent(), ty.fraction())
+    }
+
+    pub fn btor(&self) -> &R {
+        &self.btor
     }
 
     /// Get the value of the `BV` as a string of '0's and '1's. This method is
@@ -255,7 +326,7 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         unsafe { bitwuzla_term_is_value(self.node) }
     }
 
-    unop!(
+    unop_non_rounding!(
         /// Floating-point absolute value.
         => abs, BITWUZLA_KIND_FP_ABS
     );
@@ -276,7 +347,7 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         => _eq, BITWUZLA_KIND_FP_EQUAL
     );
 
-    binop!(
+    trinop!(
         /// Floating-point fused multiplcation and addition. `self` and `other` must have the same layout.
         => fma, BITWUZLA_KIND_FP_FMA
     );
@@ -309,6 +380,18 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         /// Floating-point is subnormal tester.
         /// Resulting `BV` will have bitwidth 1.
         => is_subnormal, BITWUZLA_KIND_FP_IS_SUBNORMAL
+    );
+
+    unop_cmp!(
+        /// Floating-point is normal tester.
+        /// Resulting `BV` will have bitwidth 1.
+        => is_normal, BITWUZLA_KIND_FP_IS_NORMAL
+    );
+
+    unop_cmp!(
+        /// Floating-point is normal tester.
+        /// Resulting `BV` will have bitwidth 1.
+        => is_infinite, BITWUZLA_KIND_FP_IS_INF
     );
 
     unop_cmp!(
@@ -374,24 +457,61 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         => sub, BITWUZLA_KIND_FP_SUB
     );
 
-    pub fn to_sbv(&self, width: u64) -> BV<R> {
+    pub fn to_sbv(&self, rounding_mode: RoundingMode, width: u64) -> BV<R> {
         let tm = self.btor.borrow().tm;
+        let rm = rounding_mode.to_node(self.btor().clone());
         // TODO: assert width?
         BV {
             btor: self.btor.clone(),
             node: unsafe {
-                bitwuzla_mk_term1_indexed1(tm, BITWUZLA_KIND_FP_TO_SBV, self.node, width)
+                bitwuzla_mk_term2_indexed1(tm, BITWUZLA_KIND_FP_TO_SBV, rm.node, self.node, width)
             },
         }
     }
 
-    pub fn to_ubv(&self, width: u64) -> BV<R> {
+    pub fn to_ubv(&self, rounding_mode: RoundingMode, width: u64) -> BV<R> {
         let tm = self.btor.borrow().tm;
-        // TODO: assert width?
+        let rm = rounding_mode.to_node(self.btor().clone());
         BV {
             btor: self.btor.clone(),
             node: unsafe {
-                bitwuzla_mk_term1_indexed1(tm, BITWUZLA_KIND_FP_TO_UBV, self.node, width)
+                bitwuzla_mk_term2_indexed1(tm, BITWUZLA_KIND_FP_TO_UBV, rm.node, self.node, width)
+            },
+        }
+    }
+
+    pub fn from_ubv(bv: BV<R>, rounding_mode: RoundingMode, ty: &Formats) -> Self {
+        let tm = bv.btor.borrow().tm;
+        let rm = rounding_mode.to_node(bv.btor.clone());
+        FP {
+            btor: bv.btor.clone(),
+            node: unsafe {
+                bitwuzla_mk_term2_indexed2(
+                    tm,
+                    BITWUZLA_KIND_FP_TO_FP_FROM_UBV,
+                    rm.node,
+                    bv.node,
+                    ty.exponent(),
+                    ty.fraction(),
+                )
+            },
+        }
+    }
+
+    pub fn from_sbv(bv: BV<R>, rounding_mode: RoundingMode, ty: &Formats) -> Self {
+        let tm = bv.btor.borrow().tm;
+        let rm = rounding_mode.to_node(bv.btor.clone());
+        FP {
+            btor: bv.btor.clone(),
+            node: unsafe {
+                bitwuzla_mk_term2_indexed2(
+                    tm,
+                    BITWUZLA_KIND_FP_TO_FP_FROM_SBV,
+                    rm.node,
+                    bv.node,
+                    ty.exponent(),
+                    ty.fraction(),
+                )
             },
         }
     }
@@ -402,6 +522,23 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
 
     pub fn to_fp64(&self) -> FP<R> {
         self.to_fp(11, 52 + 1)
+    }
+
+    pub fn unconstrained(&self, ty: &Formats, name: Option<&str>) -> Result<FP<R>, FPError> {
+        let tm = self.btor.borrow().tm;
+        let sort = Sort::fp(self.btor.clone(), ty.exponent(), ty.fraction());
+
+        Ok(FP {
+            btor: self.btor.clone(),
+            node: match name {
+                None => unsafe { bitwuzla_mk_const(tm, sort.as_raw(), core::ptr::null()) },
+                Some(name) => {
+                    let name = CString::new(name).map_err(|_| FPError::InvalidIdentifier)?;
+                    let cname = name.as_ptr();
+                    unsafe { bitwuzla_mk_const(tm, sort.as_raw(), cname) }
+                },
+            },
+        })
     }
 
     pub fn to_fp(&self, exp_width: u64, sig_width: u64) -> FP<R> {

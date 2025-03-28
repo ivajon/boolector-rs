@@ -1,14 +1,18 @@
 use std::{ffi::CString, time::Duration};
 
 use bitwuzla_sys::{
+    bitwuzla_new,
     bitwuzla_options_delete,
     bitwuzla_options_new,
+    bitwuzla_set_abort_callback,
     bitwuzla_set_option,
     bitwuzla_set_option_mode,
     BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST,
+    BITWUZLA_OPT_LOGLEVEL,
     BITWUZLA_OPT_PRODUCE_MODELS,
     BITWUZLA_OPT_PRODUCE_UNSAT_ASSUMPTIONS,
     BITWUZLA_OPT_TIME_LIMIT_PER,
+    BITWUZLA_OPT_VERBOSITY,
 };
 
 use crate::option::*;
@@ -32,6 +36,52 @@ impl BitwuzlaOptions {
         self.model_gen(ModelGen::All)
     }
 
+    pub fn logging(self, lvl: LogLevel) -> Self {
+        self.log_level(lvl)
+    }
+
+    pub fn verbosity(self, lvl: Verbosity) -> Self {
+        self.verbosity_level(lvl)
+    }
+
+    pub fn set_abort_callback(
+        self,
+        f: unsafe extern "C" fn(msg: *const ::std::os::raw::c_char),
+    ) -> Self {
+        unsafe {
+            bitwuzla_set_abort_callback(Some(f));
+        }
+        self
+    }
+
+    /// Whether to generate a model (set of concrete solution values) for
+    /// satisfiable instances
+    pub fn log_level(mut self, lvl: LogLevel) -> Self {
+        let val = match lvl {
+            LogLevel::Off => 0,
+            LogLevel::Err => 1,
+            LogLevel::Warn => 2,
+            LogLevel::Debug => 3,
+            LogLevel::Trace => 4,
+        };
+        unsafe { bitwuzla_set_option(self.as_raw(), BITWUZLA_OPT_LOGLEVEL, val) };
+        self
+    }
+
+    /// Whether to generate a model (set of concrete solution values) for
+    /// satisfiable instances
+    pub fn verbosity_level(mut self, lvl: Verbosity) -> Self {
+        let val = match lvl {
+            Verbosity::None => 0,
+            Verbosity::Level1 => 1,
+            Verbosity::Level2 => 2,
+            Verbosity::Level3 => 3,
+            Verbosity::Level4 => 4,
+        };
+        unsafe { bitwuzla_set_option(self.as_raw(), BITWUZLA_OPT_VERBOSITY, val) };
+        self
+    }
+
     /// Whether to generate a model (set of concrete solution values) for
     /// satisfiable instances
     pub fn model_gen(mut self, mg: ModelGen) -> Self {
@@ -42,6 +92,14 @@ impl BitwuzlaOptions {
         };
         unsafe { bitwuzla_set_option(self.as_raw(), BITWUZLA_OPT_PRODUCE_MODELS, val) };
         self
+    }
+
+    pub fn reconfigure(self, bw: &crate::Bitwuzla) -> crate::Bitwuzla {
+        let tm = bw.tm.clone();
+        crate::Bitwuzla {
+            tm,
+            btor: unsafe { bitwuzla_new(bw.tm, self.0) },
+        }
     }
 
     /// Solver timeout. If `Some`, then operations lasting longer than the given

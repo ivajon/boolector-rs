@@ -83,21 +83,6 @@ macro_rules! binop {
 
 // The attr:meta stuff is so that doc comments work correctly.
 // See https://stackoverflow.com/questions/41361897/documenting-a-function-created-with-a-macro-in-rust
-macro_rules! trinop {
-    ( $(#[$attr:meta])* => $f:ident, $kind:ident ) => {
-        $(#[$attr])*
-        pub fn $f(&self, second: &Self,third:&Self, rounding_mode: RoundingMode) -> Self {
-            let tm = self.btor.borrow().tm;
-            Self {
-                btor: self.btor.clone(),
-                node:  todo!("Trinary operations with rounding modes!")//unsafe { bitwuzla_mk_term(tm, $kind, self.node, second.node, third.node) },
-            }
-        }
-    };
-}
-
-// The attr:meta stuff is so that doc comments work correctly.
-// See https://stackoverflow.com/questions/41361897/documenting-a-function-created-with-a-macro-in-rust
 macro_rules! binop_cmp {
     ( $(#[$attr:meta])* => $f:ident, $kind:ident ) => {
         $(#[$attr])*
@@ -138,19 +123,19 @@ pub enum Formats {
 impl Formats {
     fn fraction(&self) -> u64 {
         match self {
-            Self::F16 => 10,
-            Self::F32 => 23,
-            Self::F64 => 53,
-            Self::F128 => 113,
+            Self::F16 => 10 + 1,
+            Self::F32 => 23 + 1,
+            Self::F64 => 53 + 1,
+            Self::F128 => 113 + 1,
         }
     }
 
     fn exponent(&self) -> u64 {
         match self {
-            Self::F128 => 128 - self.fraction() - 1,
-            Self::F64 => 64 - self.fraction() - 1,
-            Self::F32 => 32 - self.fraction() - 1,
-            Self::F16 => 16 - self.fraction() - 1,
+            Self::F128 => 128 - self.fraction(),
+            Self::F64 => 64 - self.fraction(),
+            Self::F32 => 32 - self.fraction(),
+            Self::F16 => 16 - self.fraction(),
         }
     }
 }
@@ -296,6 +281,41 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         }
     }
 
+    /// # Example
+    ///
+    /// ```
+    /// # use bitwuzla::{Btor, FP};
+    /// let btor = Btor::new();
+    ///
+    /// // as_f64 should round-trip for every edgecase:
+    /// for val in [-0., 0., f64::MIN, f64::MAX, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+    ///     let leet = FP::from_f64(&btor, val);
+    ///     assert_eq!(leet.as_f64(), Some(val));
+    /// }
+    /// ```
+    pub fn as_f128(&self) -> Option<f64> {
+        if self.is_const() {
+            // TODO: assert that this is a binary64 fp?
+            let s = self.as_str()?;
+
+            dbg!(&s);
+            // TODO: this is fp32
+            assert!(s.starts_with("(fp #b"));
+            assert_eq!(
+                s.len(),
+                "(fp #b0 #b10000001 #b01000000000000000000000)".len()
+            );
+            // "(fp #b0 #b10000001 #b01000000000000000000000)"
+            //  012345^789^^^^^^^^  20
+            //                   18
+            // let sign = &s[6 .. 7] == "1";
+            // Some(u64::from_str_radix(&s, 2).unwrap())
+            todo!()
+        } else {
+            None
+        }
+    }
+
     /// Does the `FP` have a constant value?
     ///
     /// Note: bitwuzla `is_const` is something entirely different
@@ -345,11 +365,6 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         /// Floating-point equality. `self` and `other` must have the same bitwidth.
         /// Resulting `BV` will have bitwidth 1.
         => _eq, BITWUZLA_KIND_FP_EQUAL
-    );
-
-    trinop!(
-        /// Floating-point fused multiplcation and addition. `self` and `other` must have the same layout.
-        => fma, BITWUZLA_KIND_FP_FMA
     );
 
     binop_cmp!(
@@ -456,6 +471,27 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         /// Floating-point round to subtraction. (sic)
         => sub, BITWUZLA_KIND_FP_SUB
     );
+
+    //pub fn to_ieee754_bv(&self) -> BV<R> {
+    //    let tm = self.btor.borrow().tm;
+    //    // TODO: assert width?
+    //    BV {
+    //        btor: self.btor.clone(),
+    //        node: unsafe { bitwuzla_mk_term1(tm, BITWUZLA_KIND_FP_TO_FP_TO_BV, self.node) },
+    //    }
+    //}
+    //
+    pub fn from_ieee754_bv(bv: &BV<R>, ty: &Formats) -> Self {
+        let tm = bv.borrow().btor.borrow().tm;
+        let (e, s) = (ty.exponent(), ty.fraction());
+        // TODO: assert width?
+        FP {
+            btor: bv.btor.clone(),
+            node: unsafe {
+                bitwuzla_mk_term1_indexed2(tm, BITWUZLA_KIND_FP_TO_FP_FROM_BV, bv.node, e, s)
+            },
+        }
+    }
 
     pub fn to_sbv(&self, rounding_mode: RoundingMode, width: u64) -> BV<R> {
         let tm = self.btor.borrow().tm;

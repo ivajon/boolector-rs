@@ -9,6 +9,24 @@ pub enum ModelGen {
     All,
 }
 
+#[repr(u64)]
+pub enum LogLevel {
+    Off = 0,
+    Err = 1,
+    Warn = 2,
+    Debug = 3,
+    Trace = 4,
+}
+
+#[repr(u64)]
+pub enum Verbosity {
+    None = 0,
+    Level1 = 1,
+    Level2 = 2,
+    Level3 = 3,
+    Level4 = 4,
+}
+
 pub enum SolverEngine {
     /// Default engine for all combinations of QF_AUFBV; uses lemmas on demand
     /// for QF_AUFBV and eager bit-blasting for QF_BV

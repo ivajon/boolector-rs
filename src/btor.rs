@@ -10,6 +10,7 @@ pub struct Bitwuzla {
     pub(crate) tm: *mut bitwuzla_sys::BitwuzlaTermManager,
     pub(crate) btor: *mut bitwuzla_sys::Bitwuzla,
 }
+
 pub type Btor = Bitwuzla;
 
 // Two `Btor`s are equal if they have the same underlying Btor pointer.
@@ -333,7 +334,7 @@ impl Default for Bitwuzla {
 impl Drop for Bitwuzla {
     fn drop(&mut self) {
         unsafe {
-            bitwuzla_delete(self.as_raw());
+            // bitwuzla_delete(self.as_raw());
         }
     }
 }

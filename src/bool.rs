@@ -23,10 +23,10 @@ macro_rules! unop {
         $(#[$attr])*
         pub fn $f(&self) -> Self {
             let tm = self.btor.borrow().tm;
-            Self {
-                btor: self.btor.clone(),
-                node: unsafe { bitwuzla_mk_term1(tm, $kind, self.node) },
-            }
+            Self::_new(
+                self.btor.clone(),
+                unsafe { bitwuzla_mk_term1(tm, $kind, self.node) },
+            )
         }
     };
 }
@@ -38,10 +38,10 @@ macro_rules! binop {
         $(#[$attr])*
         pub fn $f(&self, other: &Self) -> Self {
             let tm = self.btor.borrow().tm;
-            Self {
-                btor: self.btor.clone(),
-                node:  unsafe { bitwuzla_mk_term2(tm, $kind, self.node, other.node) },
-            }
+            Self::_new(
+                self.btor.clone(),
+                unsafe { bitwuzla_mk_term2(tm, $kind, self.node, other.node) },
+            )
         }
     };
 }
@@ -65,6 +65,13 @@ impl<R: Borrow<Bitwuzla> + Clone> Bool<R> {
         Self { btor, node }
     }
 
+    pub(crate) fn _new(btor: R, node: BitwuzlaTerm) -> Self {
+        Self {
+            btor,
+            node: unsafe { bitwuzla_term_copy(node) },
+        }
+    }
+
     /// Create a new constant `BV` representing the given `bool` (either constant
     /// `true` or constant `false`).
     pub fn from_bool(btor: R, b: bool) -> Self {
@@ -74,7 +81,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Bool<R> {
         } else {
             unsafe { bitwuzla_mk_false(tm) }
         };
-        Self { btor, node }
+        Self::_new(btor, node)
     }
 
     /// Create a one-bit-wide bitvector from this boolean.
@@ -242,12 +249,9 @@ impl<R: Borrow<Bitwuzla> + Clone> Bool<R> {
     /// ```
     pub fn cond_bv(&self, truebv: &BV<R>, falsebv: &BV<R>) -> BV<R> {
         let tm = self.btor.borrow().tm;
-        BV {
-            btor: self.btor.clone(),
-            node: unsafe {
-                bitwuzla_mk_term3(tm, BITWUZLA_KIND_ITE, self.node, truebv.node, falsebv.node)
-            },
-        }
+        BV::_new(self.btor.clone(), unsafe {
+            bitwuzla_mk_term3(tm, BITWUZLA_KIND_ITE, self.node, truebv.node, falsebv.node)
+        })
     }
 
     /// Create an if-then-else `Array` node.
@@ -276,18 +280,15 @@ impl<R: Borrow<Bitwuzla> + Clone> Bool<R> {
     /// `self` must have bitwidth 1.
     pub fn cond_fp(&self, true_fp: &FP<R>, false_fp: &FP<R>) -> FP<R> {
         let tm = self.btor.borrow().tm;
-        FP {
-            btor: self.btor.clone(),
-            node: unsafe {
-                bitwuzla_mk_term3(
-                    tm,
-                    BITWUZLA_KIND_ITE,
-                    self.node,
-                    true_fp.node,
-                    false_fp.node,
-                )
-            },
-        }
+        FP::_new(self.btor.clone(), unsafe {
+            bitwuzla_mk_term3(
+                tm,
+                BITWUZLA_KIND_ITE,
+                self.node,
+                true_fp.node,
+                false_fp.node,
+            )
+        })
     }
 
     /// Returns true if this node is an assumption that forced the input formula
@@ -319,12 +320,19 @@ impl<R: Borrow<Bitwuzla> + Clone> Bool<R> {
         unsafe { bitwuzla_is_unsat_assumption(self.btor.borrow().as_raw(), self.node) }
     }
 }
-
 impl<R: Borrow<Bitwuzla> + Clone> Clone for Bool<R> {
     fn clone(&self) -> Self {
         Self {
+            node: unsafe { bitwuzla_term_copy(self.node) },
             btor: self.btor.clone(),
-            node: self.node,
+        }
+    }
+}
+
+impl<R: Borrow<Bitwuzla> + Clone> Drop for Bool<R> {
+    fn drop(&mut self) {
+        unsafe {
+            // bitwuzla_term_release(self.node);
         }
     }
 }

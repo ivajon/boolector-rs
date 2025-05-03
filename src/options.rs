@@ -173,7 +173,7 @@ impl BitwuzlaOptions {
 
     /// Rewrite level. The default is `RewriteLevel::Full`.
     ///
-    /// bitwuzla's docs say to not change this setting after creating expressions.
+    /// bitwuzla's docs says to not change this setting after creating expressions.
     pub fn rewrite_level(mut self, rl: RewriteLevel) -> Self {
         let val = match rl {
             RewriteLevel::None => 0,
@@ -218,7 +218,7 @@ impl BitwuzlaOptions {
 impl Drop for BitwuzlaOptions {
     fn drop(&mut self) {
         unsafe {
-            bitwuzla_options_delete(self.as_raw());
+            // bitwuzla_options_delete(self.as_raw());
         }
     }
 }

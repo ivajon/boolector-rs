@@ -28,10 +28,10 @@ macro_rules! unop {
             let tm = self.btor.borrow().tm;
             let rm = rounding_mode.to_node(self.btor.clone());
 
-            Self {
-                btor: self.btor.clone(),
-                node: unsafe { bitwuzla_mk_term2(tm, $kind, rm.node, self.node) },
-            }
+            Self::_new(
+                self.btor.clone(),
+                unsafe { bitwuzla_mk_term2(tm, $kind, rm.node, self.node) },
+            )
         }
     };
 }
@@ -43,10 +43,10 @@ macro_rules! unop_non_rounding {
         pub fn $f(&self) -> Self {
             let tm = self.btor.borrow().tm;
 
-            Self {
-                btor: self.btor.clone(),
-                node: unsafe { bitwuzla_mk_term1(tm, $kind, self.node) },
-            }
+            Self::_new(
+                self.btor.clone(),
+                unsafe { bitwuzla_mk_term1(tm, $kind, self.node) },
+            )
         }
     };
 }
@@ -73,10 +73,10 @@ macro_rules! binop {
         $(#[$attr])*
         pub fn $f(&self, other: &Self) -> Self {
             let tm = self.btor.borrow().tm;
-            Self {
-                btor: self.btor.clone(),
-                node:  unsafe { bitwuzla_mk_term2(tm, $kind, self.node, other.node) },
-            }
+            Self::_new(
+                self.btor.clone(),
+                unsafe { bitwuzla_mk_term2(tm, $kind, self.node, other.node) },
+            )
         }
     };
 }
@@ -104,10 +104,10 @@ macro_rules! ternop {
         pub fn $f(&self, other: &Self, rounding_mode: RoundingMode) -> Self {
             let tm = self.btor.borrow().tm;
             let rm = rounding_mode.to_node(self.btor.clone());
-            Self {
-                btor: self.btor.clone(),
-                node:  unsafe { bitwuzla_mk_term3(tm, $kind, rm.node, self.node, other.node) },
-            }
+            Self::_new(
+                 self.btor.clone(),
+                unsafe { bitwuzla_mk_term3(tm, $kind, rm.node, self.node, other.node) },
+            )
         }
     };
 }
@@ -149,6 +149,7 @@ impl Formats {
 #[derive(PartialEq, Eq)]
 pub struct FP<R: Borrow<Bitwuzla> + Clone> {
     pub(crate) btor: R,
+    pub(crate) is_nan: Bool<R>,
     pub(crate) node: BitwuzlaTerm,
 }
 
@@ -187,7 +188,19 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
                 unsafe { bitwuzla_mk_const(tm, sort.as_raw(), symbol) }
             },
         };
-        Ok(Self { btor, node })
+        Ok(Self {
+            is_nan: Bool::new(btor.clone(), None),
+            btor,
+            node,
+        })
+    }
+
+    pub(crate) fn _new(btor: R, node: BitwuzlaTerm) -> Self {
+        Self {
+            btor: btor.clone(),
+            is_nan: Bool::new(btor, None),
+            node: unsafe { bitwuzla_term_copy(node) },
+        }
     }
 
     /// Create a new constant `FP` representing the given floating point value.
@@ -379,11 +392,16 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         => gt, BITWUZLA_KIND_FP_GT
     );
 
-    unop_cmp!(
-        /// Floating-point is Nan tester.
-        /// Resulting `BV` will have bitwidth 1.
-        => is_nan, BITWUZLA_KIND_FP_IS_NAN
-    );
+    /// Floating-point is Nan tester.
+    /// Resulting `BV` will have bitwidth 1.
+    pub fn is_nan(&self) -> Bool<R> {
+        self.is_nan.clone()
+    }
+    // unop_cmp!(
+    //     /// Floating-point is Nan tester.
+    //     /// Resulting `BV` will have bitwidth 1.
+    //     => is_nan, BITWUZLA_KIND_FP_IS_NAN
+    // );
 
     unop_cmp!(
         /// Floating-point is negative tester.
@@ -456,10 +474,9 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
     pub fn round_to_integral(&self, rounding_mode: RoundingMode) -> Self {
         let tm = self.btor.borrow().tm;
         let rm = rounding_mode.to_node(self.btor.clone());
-        Self {
-            btor: self.btor.clone(),
-            node: unsafe { bitwuzla_mk_term2(tm, BITWUZLA_KIND_FP_RTI, rm.node, self.node) },
-        }
+        Self::_new(self.btor.clone(), unsafe {
+            bitwuzla_mk_term2(tm, BITWUZLA_KIND_FP_RTI, rm.node, self.node)
+        })
     }
 
     unop!(
@@ -485,71 +502,56 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         let tm = bv.borrow().btor.borrow().tm;
         let (e, s) = (ty.exponent(), ty.fraction());
         // TODO: assert width?
-        FP {
-            btor: bv.btor.clone(),
-            node: unsafe {
-                bitwuzla_mk_term1_indexed2(tm, BITWUZLA_KIND_FP_TO_FP_FROM_BV, bv.node, e, s)
-            },
-        }
+        FP::_new(bv.btor.clone(), unsafe {
+            bitwuzla_mk_term1_indexed2(tm, BITWUZLA_KIND_FP_TO_FP_FROM_BV, bv.node, e, s)
+        })
     }
 
     pub fn to_sbv(&self, rounding_mode: RoundingMode, width: u64) -> BV<R> {
         let tm = self.btor.borrow().tm;
         let rm = rounding_mode.to_node(self.btor().clone());
         // TODO: assert width?
-        BV {
-            btor: self.btor.clone(),
-            node: unsafe {
-                bitwuzla_mk_term2_indexed1(tm, BITWUZLA_KIND_FP_TO_SBV, rm.node, self.node, width)
-            },
-        }
+        BV::_new(self.btor.clone(), unsafe {
+            bitwuzla_mk_term2_indexed1(tm, BITWUZLA_KIND_FP_TO_SBV, rm.node, self.node, width)
+        })
     }
 
     pub fn to_ubv(&self, rounding_mode: RoundingMode, width: u64) -> BV<R> {
         let tm = self.btor.borrow().tm;
         let rm = rounding_mode.to_node(self.btor().clone());
-        BV {
-            btor: self.btor.clone(),
-            node: unsafe {
-                bitwuzla_mk_term2_indexed1(tm, BITWUZLA_KIND_FP_TO_UBV, rm.node, self.node, width)
-            },
-        }
+        BV::_new(self.btor.clone(), unsafe {
+            bitwuzla_mk_term2_indexed1(tm, BITWUZLA_KIND_FP_TO_UBV, rm.node, self.node, width)
+        })
     }
 
     pub fn from_ubv(bv: BV<R>, rounding_mode: RoundingMode, ty: &Formats) -> Self {
         let tm = bv.btor.borrow().tm;
         let rm = rounding_mode.to_node(bv.btor.clone());
-        FP {
-            btor: bv.btor.clone(),
-            node: unsafe {
-                bitwuzla_mk_term2_indexed2(
-                    tm,
-                    BITWUZLA_KIND_FP_TO_FP_FROM_UBV,
-                    rm.node,
-                    bv.node,
-                    ty.exponent(),
-                    ty.fraction(),
-                )
-            },
-        }
+        FP::_new(bv.btor.clone(), unsafe {
+            bitwuzla_mk_term2_indexed2(
+                tm,
+                BITWUZLA_KIND_FP_TO_FP_FROM_UBV,
+                rm.node,
+                bv.node,
+                ty.exponent(),
+                ty.fraction(),
+            )
+        })
     }
 
     pub fn from_sbv(bv: BV<R>, rounding_mode: RoundingMode, ty: &Formats) -> Self {
         let tm = bv.btor.borrow().tm;
         let rm = rounding_mode.to_node(bv.btor.clone());
-        FP {
-            btor: bv.btor.clone(),
-            node: unsafe {
-                bitwuzla_mk_term2_indexed2(
-                    tm,
-                    BITWUZLA_KIND_FP_TO_FP_FROM_SBV,
-                    rm.node,
-                    bv.node,
-                    ty.exponent(),
-                    ty.fraction(),
-                )
-            },
-        }
+        FP::_new(bv.btor.clone(), unsafe {
+            bitwuzla_mk_term2_indexed2(
+                tm,
+                BITWUZLA_KIND_FP_TO_FP_FROM_SBV,
+                rm.node,
+                bv.node,
+                ty.exponent(),
+                ty.fraction(),
+            )
+        })
     }
 
     pub fn to_fp32(&self) -> FP<R> {
@@ -564,9 +566,9 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         let tm = self.btor.borrow().tm;
         let sort = Sort::fp(self.btor.clone(), ty.exponent(), ty.fraction());
 
-        Ok(FP {
-            btor: self.btor.clone(),
-            node: match name {
+        Ok(FP::_new(
+            self.btor.clone(),
+            match name {
                 None => unsafe { bitwuzla_mk_const(tm, sort.as_raw(), core::ptr::null()) },
                 Some(name) => {
                     let name = CString::new(name).map_err(|_| FPError::InvalidIdentifier)?;
@@ -574,31 +576,37 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
                     unsafe { bitwuzla_mk_const(tm, sort.as_raw(), cname) }
                 },
             },
-        })
+        ))
     }
 
     pub fn to_fp(&self, exp_width: u64, sig_width: u64) -> FP<R> {
         let tm = self.btor.borrow().tm;
-        FP {
-            btor: self.btor.clone(),
-            node: unsafe {
-                bitwuzla_mk_term1_indexed2(
-                    tm,
-                    BITWUZLA_KIND_FP_TO_FP_FROM_FP,
-                    self.node,
-                    exp_width,
-                    sig_width,
-                )
-            },
-        }
+        FP::_new(self.btor.clone(), unsafe {
+            bitwuzla_mk_term1_indexed2(
+                tm,
+                BITWUZLA_KIND_FP_TO_FP_FROM_FP,
+                self.node,
+                exp_width,
+                sig_width,
+            )
+        })
     }
 }
 
 impl<R: Borrow<Bitwuzla> + Clone> Clone for FP<R> {
     fn clone(&self) -> Self {
         Self {
+            node: unsafe { bitwuzla_term_copy(self.node) },
             btor: self.btor.clone(),
-            node: self.node,
+            is_nan: self.is_nan.clone(),
+        }
+    }
+}
+
+impl<R: Borrow<Bitwuzla> + Clone> Drop for FP<R> {
+    fn drop(&mut self) {
+        unsafe {
+            // bitwuzla_term_release(self.node);
         }
     }
 }

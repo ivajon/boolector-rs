@@ -90,6 +90,15 @@ impl<R: Borrow<Bitwuzla> + Clone> Sort<R> {
     }
 }
 
+impl<R: Borrow<Bitwuzla> + Clone> Clone for Sort<R> {
+    fn clone(&self) -> Self {
+        Sort {
+            btor: self.btor.clone(),
+            sort: unsafe { bitwuzla_sort_copy(self.as_raw()) },
+        }
+    }
+}
+
 impl<R: Borrow<Bitwuzla> + Clone> Drop for Sort<R> {
     fn drop(&mut self) {
         // unsafe { bitwuzla_release_sort(self.btor.borrow().as_raw(), self.as_raw()) }

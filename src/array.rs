@@ -17,6 +17,23 @@ pub struct Array<R: Borrow<Bitwuzla> + Clone> {
     pub(crate) node: BitwuzlaTerm,
 }
 
+impl<R: Borrow<Bitwuzla> + Clone> Clone for Array<R> {
+    fn clone(&self) -> Self {
+        Self {
+            node: unsafe { bitwuzla_term_copy(self.node) },
+            btor: self.btor.clone(),
+        }
+    }
+}
+
+impl<R: Borrow<Bitwuzla> + Clone> Drop for Array<R> {
+    fn drop(&mut self) {
+        unsafe {
+            // bitwuzla_term_release(self.node);
+        }
+    }
+}
+
 impl<R: Borrow<Bitwuzla> + Clone> Array<R> {
     /// Create a new `Array` which maps `BV`s of width `index_width` to `BV`s of
     /// width `element_width`. All values in the `Array` will be unconstrained.
@@ -67,10 +84,17 @@ impl<R: Borrow<Bitwuzla> + Clone> Array<R> {
             Some(symbol) => {
                 let cstring = CString::new(symbol).unwrap();
                 let symbol = cstring.as_ptr() as *const libc::c_char;
-                unsafe { bitwuzla_mk_var(tm, kind, symbol) }
+                unsafe { bitwuzla_mk_const(tm, kind, symbol) }
             },
         };
-        Self { btor, node }
+        Self::_new(btor, node)
+    }
+
+    pub(crate) fn _new(btor: R, node: BitwuzlaTerm) -> Self {
+        Self {
+            btor,
+            node: unsafe { bitwuzla_term_copy(node) },
+        }
     }
 
     /// Create a new `Array` which maps `BV`s of width `index_width` to `BV`s of
@@ -117,7 +141,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Array<R> {
         let element_sort = Sort::bitvector(btor.clone(), element_width);
         let array_sort = Sort::array(btor.clone(), &index_sort, &element_sort);
         let node = unsafe { bitwuzla_mk_const_array(tm, array_sort.as_raw(), val.node) };
-        Self { btor, node }
+        Self::_new(btor, node)
     }
 
     /// Get the bitwidth of the index type of the `Array`
@@ -161,57 +185,40 @@ impl<R: Borrow<Bitwuzla> + Clone> Array<R> {
     /// Array equality. `self` and `other` must have the same index and element widths.
     pub fn _eq(&self, other: &Array<R>) -> BV<R> {
         let tm = self.btor.borrow().tm;
-        BV {
-            btor: self.btor.clone(),
-            node: unsafe { bitwuzla_mk_term2(tm, BITWUZLA_KIND_EQUAL, self.node, other.node) },
-        }
+        BV::_new(self.btor.clone(), unsafe {
+            bitwuzla_mk_term2(tm, BITWUZLA_KIND_EQUAL, self.node, other.node)
+        })
     }
 
     /// Array inequality. `self` and `other` must have the same index and element widths.
     pub fn _ne(&self, other: &Array<R>) -> BV<R> {
         let tm = self.btor.borrow().tm;
-        BV {
-            btor: self.btor.clone(),
-            node: unsafe { bitwuzla_mk_term2(tm, BITWUZLA_KIND_DISTINCT, self.node, other.node) },
-        }
+        BV::_new(self.btor.clone(), unsafe {
+            bitwuzla_mk_term2(tm, BITWUZLA_KIND_DISTINCT, self.node, other.node)
+        })
     }
 
     /// Array read: get the value in the `Array` at the given `index`
     pub fn read(&self, index: &BV<R>) -> BV<R> {
         let tm = self.btor.borrow().tm;
-        BV {
-            btor: self.btor.clone(),
-            node: unsafe {
-                bitwuzla_mk_term2(tm, BITWUZLA_KIND_ARRAY_SELECT, self.node, index.node)
-            },
-        }
+        BV::_new(self.btor.clone(), unsafe {
+            bitwuzla_mk_term2(tm, BITWUZLA_KIND_ARRAY_SELECT, self.node, index.node)
+        })
     }
 
     /// Array write: return a new `Array` which has `value` at position `index`,
     /// and all other elements unchanged.
     pub fn write(&self, index: &BV<R>, value: &BV<R>) -> Self {
         let tm = self.btor.borrow().tm;
-        Self {
-            btor: self.btor.clone(),
-            node: unsafe {
-                bitwuzla_mk_term3(
-                    tm,
-                    BITWUZLA_KIND_ARRAY_STORE,
-                    self.node,
-                    index.node,
-                    value.node,
-                )
-            },
-        }
-    }
-}
-
-impl<R: Borrow<Bitwuzla> + Clone> Clone for Array<R> {
-    fn clone(&self) -> Self {
-        Self {
-            btor: self.btor.clone(),
-            node: self.node,
-        }
+        Self::_new(self.btor.clone(), unsafe {
+            bitwuzla_mk_term3(
+                tm,
+                BITWUZLA_KIND_ARRAY_STORE,
+                self.node,
+                index.node,
+                value.node,
+            )
+        })
     }
 }
 

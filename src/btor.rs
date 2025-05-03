@@ -771,6 +771,16 @@ impl Btor {
         let cstr = unsafe { CStr::from_ptr(boolector_copyright(self.as_raw())) };
         cstr.to_str().unwrap().to_owned()
     }
+
+    pub fn simplify(&self) -> SolverResult {
+        let ret = unsafe { core::mem::transmute::<i32, u32>(boolector_simplify(self.as_raw())) };
+
+        match ret {
+            BtorSolverResult_BTOR_RESULT_SAT => SolverResult::Sat,
+            BtorSolverResult_BTOR_RESULT_UNSAT => SolverResult::Unsat,
+            _ => SolverResult::Unknown,
+        }
+    }
 }
 
 impl Default for Btor {

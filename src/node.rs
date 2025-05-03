@@ -1,7 +1,7 @@
 use crate::btor::Btor;
 use crate::sort::Sort;
 use boolector_sys::*;
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::os::raw::{c_char, c_void};
@@ -611,6 +611,10 @@ impl<R: Borrow<Btor> + Clone> BV<R> {
         unsafe { boolector_failed(self.btor.borrow().as_raw(), self.node) }
     }
 
+    pub fn simplify(&self) {
+        let _ = self.btor.borrow().simplify();
+    }
+
     binop!(
         /// Bitvector equality. `self` and `other` must have the same bitwidth.
         /// Resulting `BV` will have bitwidth 1.
@@ -923,8 +927,18 @@ impl<R: Borrow<Btor> + Clone> BV<R> {
     /// assert_eq!(slice.get_width(), 4);
     /// assert_eq!(slice.as_binary_str().unwrap(), "0010");
     pub fn slice(&self, high: u32, low: u32) -> Self {
-        assert!(low <= high, "slice: low must be <= high; got low = {}, high = {}", low, high);
-        assert!(high < self.get_width(), "slice: high must be < width; got high = {}, width = {}", high, self.get_width());
+        assert!(
+            low <= high,
+            "slice: low must be <= high; got low = {}, high = {}",
+            low,
+            high
+        );
+        assert!(
+            high < self.get_width(),
+            "slice: high must be < width; got high = {}, width = {}",
+            high,
+            self.get_width()
+        );
         Self {
             btor: self.btor.clone(),
             node: unsafe { boolector_slice(self.btor.borrow().as_raw(), self.node, high, low) },
@@ -1012,7 +1026,12 @@ impl<R: Borrow<Btor> + Clone> BV<R> {
     /// assert_eq!(y.get_a_solution().as_u64().unwrap(), 1);
     /// ```
     pub fn cond_bv(&self, truebv: &Self, falsebv: &Self) -> Self {
-        assert_eq!(self.get_width(), 1, "cond_bv: self must have bitwidth 1; got {}", self.get_width());
+        assert_eq!(
+            self.get_width(),
+            1,
+            "cond_bv: self must have bitwidth 1; got {}",
+            self.get_width()
+        );
         Self {
             btor: self.btor.clone(),
             node: unsafe {
@@ -1031,7 +1050,12 @@ impl<R: Borrow<Btor> + Clone> BV<R> {
     ///
     /// `self` must have bitwidth 1.
     pub fn cond_array(&self, true_array: &Array<R>, false_array: &Array<R>) -> Array<R> {
-        assert_eq!(self.get_width(), 1, "cond_array: self must have bitwidth 1; got {}", self.get_width());
+        assert_eq!(
+            self.get_width(),
+            1,
+            "cond_array: self must have bitwidth 1; got {}",
+            self.get_width()
+        );
         Array {
             btor: self.btor.clone(),
             node: unsafe {

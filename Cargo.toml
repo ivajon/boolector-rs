@@ -11,7 +11,7 @@ keywords = ["boolector", "smt", "ffi", "bindings"]
 license = "MIT"
 
 [dependencies]
-boolector-sys = "0.7.1"
+boolector-sys = {git = "https://github.com/ivajon/boolector-sys-static"}
 libc = "0.2.73"
 
 [features]

@@ -392,16 +392,16 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         => gt, BITWUZLA_KIND_FP_GT
     );
 
-    /// Floating-point is Nan tester.
-    /// Resulting `BV` will have bitwidth 1.
-    pub fn is_nan(&self) -> Bool<R> {
-        self.is_nan.clone()
-    }
-    // unop_cmp!(
-    //     /// Floating-point is Nan tester.
-    //     /// Resulting `BV` will have bitwidth 1.
-    //     => is_nan, BITWUZLA_KIND_FP_IS_NAN
-    // );
+    // /// Floating-point is Nan tester.
+    // /// Resulting `BV` will have bitwidth 1.
+    // pub fn is_nan(&self) -> Bool<R> {
+    //     self.is_nan.clone()
+    // }
+    unop_cmp!(
+        /// Floating-point is Nan tester.
+        /// Resulting `BV` will have bitwidth 1.
+        => is_nan, BITWUZLA_KIND_FP_IS_NAN
+    );
 
     unop_cmp!(
         /// Floating-point is negative tester.

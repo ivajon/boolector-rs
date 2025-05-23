@@ -29,7 +29,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Clone for Array<R> {
 impl<R: Borrow<Bitwuzla> + Clone> Drop for Array<R> {
     fn drop(&mut self) {
         unsafe {
-            // bitwuzla_term_release(self.node);
+            bitwuzla_term_release(self.node);
         }
     }
 }

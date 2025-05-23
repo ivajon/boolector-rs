@@ -332,7 +332,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Clone for Bool<R> {
 impl<R: Borrow<Bitwuzla> + Clone> Drop for Bool<R> {
     fn drop(&mut self) {
         unsafe {
-            // bitwuzla_term_release(self.node);
+            bitwuzla_term_release(self.node);
         }
     }
 }

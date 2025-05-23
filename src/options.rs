@@ -218,7 +218,7 @@ impl BitwuzlaOptions {
 impl Drop for BitwuzlaOptions {
     fn drop(&mut self) {
         unsafe {
-            // bitwuzla_options_delete(self.as_raw());
+            bitwuzla_options_delete(self.as_raw());
         }
     }
 }

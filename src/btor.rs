@@ -334,7 +334,7 @@ impl Default for Bitwuzla {
 impl Drop for Bitwuzla {
     fn drop(&mut self) {
         unsafe {
-            // bitwuzla_delete(self.as_raw());
+            bitwuzla_delete(self.as_raw());
         }
     }
 }

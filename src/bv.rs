@@ -31,7 +31,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Clone for BV<R> {
 impl<R: Borrow<Bitwuzla> + Clone> Drop for BV<R> {
     fn drop(&mut self) {
         unsafe {
-            // bitwuzla_term_release(self.node);
+            bitwuzla_term_release(self.node);
         }
     }
 }
@@ -616,6 +616,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         /// bitwidth 1, and be `true` if multiplying `self` and `other` would
         /// overflow when interpreting both `self` and `other` as unsigned.
         => umulo, BITWUZLA_KIND_BV_UMUL_OVERFLOW
+
     );
     binop_cmp!(
         /// Signed multiplication overflow detection. Resulting `BV` will have
@@ -1119,7 +1120,10 @@ impl BVSolution {
                 .as_01x_str()
                 .chars()
                 .map(|c| match c {
-                    'x' => '0',
+                    'x' => {
+                        println!("Value had unknown bit");
+                        '0'
+                    },
                     c => c,
                 })
                 .collect(),

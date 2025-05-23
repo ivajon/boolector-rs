@@ -5,9 +5,11 @@ use crate::RoundingMode;
 use crate::BV;
 use bitwuzla_sys::*;
 use std::borrow::Borrow;
+use std::collections::HashSet;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::fmt;
+use std::hint::black_box;
 use std::os::raw::c_char;
 
 /// Enumerates the errors that may occur when using these bindings.
@@ -252,12 +254,90 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
     /// assert_eq!(unconstrained.as_str(), None);
     /// ```
     pub fn as_str(&self) -> Option<String> {
+        let sols = self.get_solutions(10);
+        println!("Possible solutions {sols:?}");
+        if self.is_const() {
+            println!("Is not constant!!!!");
+        }
+
+        let fp_sol = self.get_a_solution();
+
+        black_box(fp_sol);
+        let string = unsafe { CStr::from_ptr(bitwuzla_term_to_string(self.node)) };
+
         if self.is_const() {
             let string = unsafe { CStr::from_ptr(bitwuzla_term_to_string(self.node)) };
             Some(string.to_string_lossy().into_owned())
         } else {
             None
         }
+    }
+
+    /// Get a solution for the `BV` according to the current model.
+    ///
+    /// This requires that model generation is enabled (see
+    /// [`Btor::set_opt`](struct.Btor.html#method.set_opt)), and that the most
+    /// recent call to [`Btor::sat()`](struct.Btor.html#method.sat) returned
+    /// `SolverResult::Sat`.
+    ///
+    /// Calling this multiple times on the same `BV` or different arbitrary `BV`s
+    /// (for the same `Btor` instance) will produce a consistent set of solutions
+    /// as long as the `Btor`'s state is not otherwise changed. That is, this
+    /// queries an underlying model which won't change unless the `Btor` state
+    /// changes.
+    ///
+    /// For a code example, see [`BV::new()`](struct.BV.html#method.new).
+    pub fn get_a_solution(&self) -> Option<FPSolution> {
+        let btor: &Bitwuzla = self.btor.borrow();
+        if !btor.is_sat() {
+            return None;
+        }
+
+        let bv_val = unsafe { bitwuzla_get_value(btor.as_raw(), self.node) };
+        let bv_str = unsafe { bitwuzla_term_value_get_str(bv_val) };
+        Some(FPSolution::from_raw(bv_str))
+    }
+
+    pub fn get_solutions(&self, limit: usize) -> Vec<FPSolution> {
+        self.btor.borrow().push(1);
+        let mut ret: HashSet<FPSolution> = HashSet::new();
+        for _idx in 0 .. limit {
+            if !self.btor.borrow().is_sat() {
+                break;
+            }
+            let self_copy = self.clone();
+            let sol = self.get_a_solution();
+            if sol.is_none() {
+                break;
+            }
+            let sol = sol.expect("Preconditions to be valid.");
+            let fp = unsafe { sol.clone().to_bv(self.btor.clone()).to_fp32() };
+            self_copy._eq(&fp).not().assert();
+
+            if !ret.insert(sol) {
+                // No need to continue, we have collected all variants.
+                break;
+            }
+        }
+        self.btor.borrow().pop(1);
+
+        ret.iter().cloned().collect::<Vec<_>>()
+    }
+    /// # Example
+    ///
+    /// ```
+    /// # use bitwuzla::{Btor, FP};
+    /// let btor = Btor::new();
+    ///
+    /// // as_f64 should round-trip for every edgecase:
+    /// for val in [-0., 0., f64::MIN, f64::MAX, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+    ///     let leet = FP::from_f64(&btor, val);
+    ///     assert_eq!(leet.as_f64(), Some(val));
+    /// }
+    /// ```
+    pub fn as_bv(&self) -> Option<BV<R>> {
+        let sol = self.get_a_solution()?;
+        unsafe { Some(sol.to_bv(self.btor.clone())) }
     }
 
     /// # Example
@@ -606,7 +686,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Clone for FP<R> {
 impl<R: Borrow<Bitwuzla> + Clone> Drop for FP<R> {
     fn drop(&mut self) {
         unsafe {
-            // bitwuzla_term_release(self.node);
+            bitwuzla_term_release(self.node);
         }
     }
 }
@@ -615,5 +695,160 @@ impl<R: Borrow<Bitwuzla> + Clone> fmt::Debug for FP<R> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let string = unsafe { CStr::from_ptr(bitwuzla_term_to_string(self.node)) };
         write!(f, "{}", string.to_string_lossy())
+    }
+}
+/// A `BVSolution` represents a possible solution for one `BV` in a given model.
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+pub struct FPSolution {
+    assignment: String,
+}
+
+impl FPSolution {
+    /// expects an `assignment` in _binary_ (01x) format
+    ///
+    /// relevant: https://github.com/boolector/boolector/issues/79
+    fn from_raw(assignment: *const c_char) -> Self {
+        let s = {
+            let cstr = unsafe { CStr::from_ptr(assignment) };
+            cstr.to_str().unwrap().to_owned()
+        };
+        println!("String {s}");
+        Self { assignment: s }
+    }
+
+    /// Get a string of length equal to the bitwidth, where each character in the
+    /// string is either `0`, `1`, or `x`. An `x` indicates that, in this model,
+    /// the corresponding bit can be arbitrarily chosen to be `0` or `1` and all
+    /// constraints would still be satisfied.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use bitwuzla::{Btor, BV, SolverResult};
+    /// let btor = Btor::new();
+    ///
+    /// // `bv` starts as an unconstrained 8-bit value
+    /// let bv = BV::new(&btor, 8, Some("foo"));
+    ///
+    /// // assert that the first two digits of `bv` are 0
+    /// let mask = BV::from_u32(&btor, 0b11000000, 8);
+    /// let zero = BV::zero(&btor, 8);
+    /// bv.and(&mask)._eq(&zero).assert();
+    ///
+    /// // `as_01x_str()` gives an 8-character string whose first
+    /// // two digits are '0'
+    /// assert_eq!(btor.sat(), SolverResult::Sat);
+    /// let solution = bv.get_a_solution();
+    /// assert_eq!(&solution.as_01x_str()[..2], "00");
+    /// ```
+    pub fn as_01x_str(&self) -> &str {
+        &self.assignment
+    }
+
+    /// Turn a string of `0`, `1`, and/or `x` characters into a `BVSolution`.
+    /// See [`as_01x_str()`](struct.BVSolution.html#method.as_01x_str).
+    pub fn from_01x_str(s: impl Into<String>) -> Self {
+        Self {
+            assignment: s.into(),
+        }
+    }
+
+    /// Get a version of this `BVSolution` that is guaranteed to correspond to
+    /// exactly one possible value. For instance,
+    /// [`as_01x_str()`](struct.BVSolution.html#method.as_01x_str) on the
+    /// resulting `BVSolution` will contain no `x`s.
+    ///
+    /// In the event that the input `BVSolution` did represent multiple possible
+    /// values (see [`as_01x_str()`](struct.BVSolution.html#method.as_01x_str)),
+    /// this will simply choose one possible value arbitrarily.
+    pub fn disambiguate(&self) -> Self {
+        Self {
+            assignment: self
+                .as_01x_str()
+                .chars()
+                .map(|c| match c {
+                    'x' => '0',
+                    c => c,
+                })
+                .collect(),
+        }
+    }
+
+    pub unsafe fn to_bv<R: Borrow<Bitwuzla> + Clone>(self, r: R) -> BV<R> {
+        let mut ret: Option<BV<R>> = None;
+        for char in self.assignment.chars() {
+            let addendum = match char {
+                'x' => BV::new(r.clone(), 1, None),
+                '1' => BV::from_bool(r.clone(), true),
+                '0' => BV::from_bool(r.clone(), false),
+                _ => {
+                    println!("Got {char}");
+                    panic!("Faulty string");
+                },
+            };
+            ret = Some(match &ret {
+                Some(inner_ret) => inner_ret.concat(&addendum),
+                None => addendum,
+            });
+        }
+        ret.expect("None empty literal")
+    }
+
+    /// Get a version of this `BVSolution` that is guaranteed to correspond to
+    /// exactly one possible value. For instance,
+    /// [`as_01x_str()`](struct.BVSolution.html#method.as_01x_str) on the
+    /// resulting `BVSolution` will contain no `x`s.
+    ///
+    /// In the event that the input `BVSolution` did represent multiple possible
+    /// values (see [`as_01x_str()`](struct.BVSolution.html#method.as_01x_str)),
+    /// this will simply choose one possible value arbitrarily.
+    pub fn deterministic(self) -> Option<Self> {
+        if self.as_01x_str().contains('x') {
+            return None;
+        }
+        Some(self)
+    }
+
+    /// Get a `u64` value for the `BVSolution`. In the event that this
+    /// `BVSolution` represents multiple possible values (see
+    /// [`as_01x_str()`](struct.BVSolution.html#method.as_01x_str)), this will
+    /// simply choose one possible value arbitrarily.
+    ///
+    /// Returns `None` if the value does not fit in 64 bits.
+    ///
+    /// For a code example, see [`BV::new()`](struct.BV.html#method.new).
+    pub fn as_u64(&self) -> Option<u64> {
+        let disambiguated = self.disambiguate();
+        let binary_string = disambiguated.as_01x_str();
+        if binary_string.len() > 64 {
+            None
+        } else {
+            Some(u64::from_str_radix(&binary_string, 2).unwrap_or_else(|e| {
+                panic!(
+                    "Got the following error while trying to parse {:?} as a binary string: {}",
+                    binary_string, e
+                )
+            }))
+        }
+    }
+
+    /// Get a `bool` value for the `BVSolution`. In the event that this
+    /// `BVSolution` represents both `true` and `false` (see
+    /// [`as_01x_str()`](struct.BVSolution.html#method.as_01x_str)), this will
+    /// return `false`.
+    ///
+    /// Returns `None` if the `BVSolution` is not a 1-bit value.
+    pub fn as_bool(&self) -> Option<bool> {
+        let binary_string = self.as_01x_str();
+        if binary_string.len() == 1 {
+            match binary_string.chars().nth(0).unwrap() {
+                '0' => Some(false),
+                '1' => Some(true),
+                'x' => Some(false),
+                c => panic!("Unexpected solution character: {}", c),
+            }
+        } else {
+            None
+        }
     }
 }

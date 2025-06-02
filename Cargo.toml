@@ -12,7 +12,6 @@ license = "MIT"
 
 [dependencies]
 # bitwuzla-sys = "0.2.0"
-# bitwuzla-sys = { path = "../bitwuzla-sys" }
 bitwuzla-sys = { git = "https://github.com/ivajon/bitwuzla-sys" }
 libc = "0.2.73"
 

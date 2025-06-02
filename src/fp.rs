@@ -151,7 +151,6 @@ impl Formats {
 #[derive(PartialEq, Eq)]
 pub struct FP<R: Borrow<Bitwuzla> + Clone> {
     pub(crate) btor: R,
-    pub(crate) is_nan: Bool<R>,
     pub(crate) node: BitwuzlaTerm,
 }
 
@@ -190,17 +189,12 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
                 unsafe { bitwuzla_mk_const(tm, sort.as_raw(), symbol) }
             },
         };
-        Ok(Self {
-            is_nan: Bool::new(btor.clone(), None),
-            btor,
-            node,
-        })
+        Ok(Self { btor, node })
     }
 
     pub(crate) fn _new(btor: R, node: BitwuzlaTerm) -> Self {
         Self {
             btor: btor.clone(),
-            is_nan: Bool::new(btor, None),
             node: unsafe { bitwuzla_term_copy(node) },
         }
     }
@@ -678,7 +672,6 @@ impl<R: Borrow<Bitwuzla> + Clone> Clone for FP<R> {
         Self {
             node: unsafe { bitwuzla_term_copy(self.node) },
             btor: self.btor.clone(),
-            is_nan: self.is_nan.clone(),
         }
     }
 }

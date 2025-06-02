@@ -1,5 +1,6 @@
 use crate::{Array, BV};
 use bitwuzla_sys::*;
+use libc::wait;
 use std::borrow::Borrow;
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -322,6 +323,12 @@ impl Bitwuzla {
     pub fn get_copyright(&self) -> String {
         let cstr = unsafe { CStr::from_ptr(bitwuzla_copyright()) };
         cstr.to_str().unwrap().to_owned()
+    }
+
+    pub fn assert<R: Borrow<Bitwuzla> + Clone>(stmt: crate::Bool<R>) {
+        let ptr: &Self = stmt.btor.borrow();
+        let btor = ptr.btor;
+        unsafe { bitwuzla_assert(btor, stmt.node) };
     }
 }
 

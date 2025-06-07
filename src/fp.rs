@@ -114,6 +114,7 @@ macro_rules! ternop {
     };
 }
 
+#[derive(Debug)]
 /// Enumerates the supported FP formats.
 pub enum Formats {
     F16,
@@ -121,23 +122,26 @@ pub enum Formats {
     F64,
     F128,
 }
-
+// BITWUZLA_CHECK((exp_size == 5 && sig_size == 11)                            \
+//                || (exp_size == 8 && sig_size == 24)                         \
+//                || (exp_size == 11 && sig_size == 53)                        \
+//                || (exp_size == 15 && sig_size == 113))                      \
 impl Formats {
-    fn fraction(&self) -> u64 {
+    const fn fraction(&self) -> u64 {
         match self {
-            Self::F16 => 10 + 1,
-            Self::F32 => 23 + 1,
-            Self::F64 => 53 + 1,
-            Self::F128 => 113 + 1,
+            Self::F16 => 11,
+            Self::F32 => 24,
+            Self::F64 => 53,
+            Self::F128 => 113,
         }
     }
 
-    fn exponent(&self) -> u64 {
+    const fn exponent(&self) -> u64 {
         match self {
-            Self::F128 => 128 - self.fraction(),
-            Self::F64 => 64 - self.fraction(),
-            Self::F32 => 32 - self.fraction(),
-            Self::F16 => 16 - self.fraction(),
+            Self::F128 => 15,
+            Self::F64 => 11,
+            Self::F32 => 8,
+            Self::F16 => 5,
         }
     }
 }

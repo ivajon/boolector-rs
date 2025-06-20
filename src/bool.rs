@@ -249,9 +249,13 @@ impl<R: Borrow<Bitwuzla> + Clone> Bool<R> {
     /// ```
     pub fn cond_bv(&self, truebv: &BV<R>, falsebv: &BV<R>) -> BV<R> {
         let tm = self.btor.borrow().tm;
-        BV::_new(self.btor.clone(), unsafe {
-            bitwuzla_mk_term3(tm, BITWUZLA_KIND_ITE, self.node, truebv.node, falsebv.node)
-        })
+        BV::_new(
+            self.btor.clone(),
+            unsafe {
+                bitwuzla_mk_term3(tm, BITWUZLA_KIND_ITE, self.node, truebv.node, falsebv.node)
+            },
+            None,
+        )
     }
 
     /// Create an if-then-else `Array` node.

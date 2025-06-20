@@ -185,25 +185,31 @@ impl<R: Borrow<Bitwuzla> + Clone> Array<R> {
     /// Array equality. `self` and `other` must have the same index and element widths.
     pub fn _eq(&self, other: &Array<R>) -> BV<R> {
         let tm = self.btor.borrow().tm;
-        BV::_new(self.btor.clone(), unsafe {
-            bitwuzla_mk_term2(tm, BITWUZLA_KIND_EQUAL, self.node, other.node)
-        })
+        BV::_new(
+            self.btor.clone(),
+            unsafe { bitwuzla_mk_term2(tm, BITWUZLA_KIND_EQUAL, self.node, other.node) },
+            None,
+        )
     }
 
     /// Array inequality. `self` and `other` must have the same index and element widths.
     pub fn _ne(&self, other: &Array<R>) -> BV<R> {
         let tm = self.btor.borrow().tm;
-        BV::_new(self.btor.clone(), unsafe {
-            bitwuzla_mk_term2(tm, BITWUZLA_KIND_DISTINCT, self.node, other.node)
-        })
+        BV::_new(
+            self.btor.clone(),
+            unsafe { bitwuzla_mk_term2(tm, BITWUZLA_KIND_DISTINCT, self.node, other.node) },
+            None,
+        )
     }
 
     /// Array read: get the value in the `Array` at the given `index`
     pub fn read(&self, index: &BV<R>) -> BV<R> {
         let tm = self.btor.borrow().tm;
-        BV::_new(self.btor.clone(), unsafe {
-            bitwuzla_mk_term2(tm, BITWUZLA_KIND_ARRAY_SELECT, self.node, index.node)
-        })
+        BV::_new(
+            self.btor.clone(),
+            unsafe { bitwuzla_mk_term2(tm, BITWUZLA_KIND_ARRAY_SELECT, self.node, index.node) },
+            None,
+        )
     }
 
     /// Array write: return a new `Array` which has `value` at position `index`,

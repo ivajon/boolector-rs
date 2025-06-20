@@ -3,10 +3,12 @@ use crate::sort::Sort;
 use crate::{Bool, Btor, FP};
 use bitwuzla_sys::*;
 use std::borrow::Borrow;
+use std::cell::Cell;
 use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::os::raw::c_char;
+use std::sync::atomic::AtomicU64;
 
 /// A bitvector object: that is, a single symbolic value, consisting of some
 /// number of symbolic bits.
@@ -17,6 +19,7 @@ use std::os::raw::c_char;
 pub struct BV<R: Borrow<Bitwuzla> + Clone> {
     pub(crate) btor: R,
     pub(crate) node: BitwuzlaTerm,
+    pub(crate) c: Cell<Option<u64>>,
 }
 
 impl<R: Borrow<Bitwuzla> + Clone> Clone for BV<R> {
@@ -24,6 +27,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Clone for BV<R> {
         Self {
             node: unsafe { bitwuzla_term_copy(self.node) },
             btor: self.btor.clone(),
+            c: self.c.clone(),
         }
     }
 }
@@ -55,6 +59,7 @@ macro_rules! unop {
             Self::_new(
                  self.btor.clone(),
                 unsafe { bitwuzla_mk_term1(tm, $kind, self.node) },
+                None
             )
         }
     };
@@ -71,6 +76,8 @@ macro_rules! binop {
             Self::_new(
                 self.btor.clone(),
                 unsafe { bitwuzla_mk_term2(tm, $kind, self.node, other.node) },
+                None
+
             )
         }
     };
@@ -128,13 +135,18 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
                 unsafe { bitwuzla_mk_const(tm, sort.as_raw(), symbol) }
             },
         };
-        Self { btor, node }
+        Self {
+            btor,
+            node,
+            c: Cell::new(None),
+        }
     }
 
-    pub(crate) fn _new(btor: R, bv: BitwuzlaTerm) -> Self {
+    pub(crate) fn _new(btor: R, bv: BitwuzlaTerm, c: Option<u64>) -> Self {
         Self {
             btor,
             node: unsafe { bitwuzla_term_copy(bv) },
+            c: Cell::new(c),
         }
     }
 
@@ -153,7 +165,11 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let tm = btor.borrow().tm;
         let sort = Sort::bitvector(btor.clone(), width);
         let term = unsafe { bitwuzla_mk_bv_value_int64(tm, sort.as_raw(), val as i64) };
-        Self::_new(btor, term)
+        Self::_new(
+            btor,
+            term,
+            Some(unsafe { core::mem::transmute::<_, u32>(val) as u64 }),
+        )
     }
 
     /// Create a new constant `BV` representing the given unsigned integer.
@@ -164,7 +180,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let tm = btor.borrow().tm;
         let sort = Sort::bitvector(btor.clone(), width);
         let node = unsafe { bitwuzla_mk_bv_value_uint64(tm, sort.as_raw(), u as u64) };
-        Self::_new(btor, node)
+        Self::_new(btor, node, Some(u as u64))
     }
 
     /// Create a new constant `BV` representing the given signed integer.
@@ -174,7 +190,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let sort = Sort::bitvector(btor.clone(), width);
         let node = unsafe { bitwuzla_mk_bv_value_int64(tm, sort.as_raw(), val) };
 
-        Self::_new(btor, node)
+        Self::_new(btor, node, Some(unsafe { core::mem::transmute(node) }))
     }
 
     /// Create a new constant `BV` representing the given unsigned integer.
@@ -183,7 +199,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let tm = btor.borrow().tm;
         let sort = Sort::bitvector(btor.clone(), width);
         let node = unsafe { bitwuzla_mk_bv_value_uint64(tm, sort.as_raw(), u) };
-        Self::_new(btor, node)
+        Self::_new(btor, node, Some(u))
     }
 
     /// Create the constant `0` of the given width.
@@ -205,6 +221,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         Self::_new(
             btor, // out of order so it can be used above but moved in here
             node,
+            Some(0),
         )
     }
 
@@ -227,6 +244,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         Self::_new(
             btor, // out of order so it can be used above but moved in here
             node,
+            Some(1),
         )
     }
 
@@ -248,7 +266,8 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let node = unsafe { bitwuzla_mk_bv_max_signed(tm, sort.as_raw()) };
         Self::_new(
             btor, // out of order so it can be used above but moved in here
-            node,
+            node, // Sub-optimal...
+            None,
         )
     }
 
@@ -270,7 +289,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let node = unsafe { bitwuzla_mk_bv_min_signed(tm, sort.as_raw()) };
         Self::_new(
             btor, // out of order so it can be used above but moved in here
-            node,
+            node, None,
         )
     }
 
@@ -290,7 +309,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let tm = btor.borrow().tm;
         let sort = Sort::bitvector(btor.clone(), width);
         let node = unsafe { bitwuzla_mk_bv_ones(tm, sort.as_raw()) };
-        Self::_new(btor, node)
+        Self::_new(btor, node, Some((1 << width) - 1))
     }
 
     /// Create a new constant `BV` from the given string `bits` representing a
@@ -304,7 +323,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let sort = Sort::bitvector(btor.clone(), bits.len() as u64);
         let cstring = CString::new(bits).unwrap();
         let node = unsafe { bitwuzla_mk_bv_value(tm, sort.as_raw(), cstring.as_ptr(), 2) };
-        Self::_new(btor, node)
+        Self::_new(btor, node, None)
     }
 
     /// Create a new constant `BV` from the given string `num` representing a
@@ -317,7 +336,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let node = unsafe {
             bitwuzla_mk_bv_value(tm, sort.as_raw(), cstring.as_ptr() as *const c_char, 10)
         };
-        Self::_new(btor, node)
+        Self::_new(btor, node, None)
     }
 
     /// Create a new constant `BV` from the given string `num` representing a
@@ -332,7 +351,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         };
         Self::_new(
             btor, // out of order so it can be used above but moved in here
-            node,
+            node, None,
         )
     }
 
@@ -782,9 +801,11 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
     /// ```
     pub fn uext(&self, n: u64) -> Self {
         let tm = self.btor.borrow().tm;
-        Self::_new(self.btor.clone(), unsafe {
-            bitwuzla_mk_term1_indexed1(tm, BITWUZLA_KIND_BV_ZERO_EXTEND, self.node, n)
-        })
+        Self::_new(
+            self.btor.clone(),
+            unsafe { bitwuzla_mk_term1_indexed1(tm, BITWUZLA_KIND_BV_ZERO_EXTEND, self.node, n) },
+            None,
+        )
     }
 
     /// Sign-extension operation, extending by `n` bits. Resulting `BV` will have
@@ -809,9 +830,11 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
     /// ```
     pub fn sext(&self, n: u64) -> Self {
         let tm = self.btor.borrow().tm;
-        Self::_new(self.btor.clone(), unsafe {
-            bitwuzla_mk_term1_indexed1(tm, BITWUZLA_KIND_BV_SIGN_EXTEND, self.node, n)
-        })
+        Self::_new(
+            self.btor.clone(),
+            unsafe { bitwuzla_mk_term1_indexed1(tm, BITWUZLA_KIND_BV_SIGN_EXTEND, self.node, n) },
+            None,
+        )
     }
 
     /// Slicing operation: obtain bits `high` through `low` (inclusive) of `self`.
@@ -849,9 +872,13 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
             high,
             self.get_width()
         );
-        Self::_new(self.btor.clone(), unsafe {
-            bitwuzla_mk_term1_indexed2(tm, BITWUZLA_KIND_BV_EXTRACT, self.node, high, low)
-        })
+        Self::_new(
+            self.btor.clone(),
+            unsafe {
+                bitwuzla_mk_term1_indexed2(tm, BITWUZLA_KIND_BV_EXTRACT, self.node, high, low)
+            },
+            None,
+        )
     }
 
     binop!(
@@ -886,9 +913,11 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
     /// Concatenate the `BV` with itself `n` times
     pub fn repeat(&self, n: u64) -> Self {
         let tm = self.btor.borrow().tm;
-        Self::_new(self.btor.clone(), unsafe {
-            bitwuzla_mk_term1_indexed1(tm, BITWUZLA_KIND_BV_REPEAT, self.node, n)
-        })
+        Self::_new(
+            self.btor.clone(),
+            unsafe { bitwuzla_mk_term1_indexed1(tm, BITWUZLA_KIND_BV_REPEAT, self.node, n) },
+            None,
+        )
     }
 
     //pub fn to_bool(&self) -> Bool<R> {
@@ -920,9 +949,11 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
 
     pub fn cond_bv(&self, t: &BV<R>, e: &BV<R>) -> Self {
         let tm = self.btor.borrow().tm;
-        Self::_new(self.btor.clone(), unsafe {
-            bitwuzla_mk_term3(tm, BITWUZLA_KIND_ITE, self.node, t.node, e.node)
-        })
+        Self::_new(
+            self.btor.clone(),
+            unsafe { bitwuzla_mk_term3(tm, BITWUZLA_KIND_ITE, self.node, t.node, e.node) },
+            None,
+        )
     }
 }
 
@@ -1017,6 +1048,9 @@ impl<R: AsRef<Bitwuzla> + Clone + Borrow<Bitwuzla>> BV<R> {
     }
 
     pub fn get_solutions(&self, limit: usize) -> Vec<BVSolution> {
+        if let Some(c) = self.c.get() {
+            return vec![BVSolution::from_u64(c)];
+        }
         self.btor.as_ref().push(1);
         let mut ret: HashSet<BVSolution> = HashSet::new();
         for _idx in 0 .. limit {
@@ -1028,7 +1062,7 @@ impl<R: AsRef<Bitwuzla> + Clone + Borrow<Bitwuzla>> BV<R> {
             self_copy
                 ._ne(&BV::from_binary_str(
                     self.btor.clone(),
-                    sol.clone().disambiguate().as_01x_str(),
+                    &sol.clone().disambiguate().as_01x_str(),
                 ))
                 .assert();
 
@@ -1039,7 +1073,15 @@ impl<R: AsRef<Bitwuzla> + Clone + Borrow<Bitwuzla>> BV<R> {
         }
         self.btor.as_ref().pop(1);
 
-        ret.iter().cloned().collect::<Vec<_>>()
+        let ret = ret.iter().cloned().collect::<Vec<_>>();
+
+        if limit != 1 && ret.len() == 1 {
+            let ret = &ret[0];
+            if let Some(det) = ret.as_u64() {
+                self.c.set(Some(det));
+            }
+        }
+        ret
     }
 }
 
@@ -1054,9 +1096,16 @@ impl<R: Borrow<Bitwuzla> + Clone> fmt::Debug for BV<R> {
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct BVSolution {
     assignment: String,
+    c: Option<u64>,
 }
 
 impl BVSolution {
+    fn from_u64(c: u64) -> Self {
+        Self {
+            assignment: format!("{c:#b}"),
+            c: Some(c),
+        }
+    }
     /// expects an `assignment` in _binary_ (01x) format
     ///
     /// relevant: https://github.com/boolector/boolector/issues/79
@@ -1066,6 +1115,7 @@ impl BVSolution {
                 let cstr = unsafe { CStr::from_ptr(assignment) };
                 cstr.to_str().unwrap().to_owned()
             },
+            c: None,
         }
     }
 
@@ -1094,8 +1144,12 @@ impl BVSolution {
     /// let solution = bv.get_a_solution();
     /// assert_eq!(&solution.as_01x_str()[..2], "00");
     /// ```
-    pub fn as_01x_str(&self) -> &str {
-        &self.assignment
+    pub fn as_01x_str(&self) -> String {
+        if let Some(c) = self.c {
+            let ret = format!("{c:#b}").strip_prefix("0b").unwrap().to_string();
+            return ret;
+        }
+        self.assignment.clone()
     }
 
     /// Turn a string of `0`, `1`, and/or `x` characters into a `BVSolution`.
@@ -1103,6 +1157,7 @@ impl BVSolution {
     pub fn from_01x_str(s: impl Into<String>) -> Self {
         Self {
             assignment: s.into(),
+            c: None,
         }
     }
 
@@ -1127,6 +1182,7 @@ impl BVSolution {
                     c => c,
                 })
                 .collect(),
+            c: None,
         }
     }
 
@@ -1154,6 +1210,12 @@ impl BVSolution {
     ///
     /// For a code example, see [`BV::new()`](struct.BV.html#method.new).
     pub fn as_u64(&self) -> Option<u64> {
+        if let Some(c) = self.c {
+            return Some(c);
+        }
+        // if self.assignment.contains("x") {
+        //     return None;
+        // }
         let disambiguated = self.disambiguate();
         let binary_string = disambiguated.as_01x_str();
         if binary_string.len() > 64 {

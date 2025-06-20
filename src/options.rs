@@ -7,10 +7,12 @@ use bitwuzla_sys::{
     bitwuzla_set_abort_callback,
     bitwuzla_set_option,
     bitwuzla_set_option_mode,
+    BITWUZLA_OPT_ABSTRACTION,
     BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST,
     BITWUZLA_OPT_LOGLEVEL,
     BITWUZLA_OPT_PRODUCE_MODELS,
     BITWUZLA_OPT_PRODUCE_UNSAT_ASSUMPTIONS,
+    BITWUZLA_OPT_PROP_SEXT,
     BITWUZLA_OPT_TIME_LIMIT_PER,
     BITWUZLA_OPT_VERBOSITY,
 };
@@ -209,8 +211,19 @@ impl BitwuzlaOptions {
         self
     }
 
-    pub fn incremental(mut self) -> Self {
-        unsafe { bitwuzla_set_option(self.as_raw(), BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, 1) };
+    pub fn bv_abstractions(mut self, v: bool) -> Self {
+        unsafe { bitwuzla_set_option(self.as_raw(), BITWUZLA_OPT_ABSTRACTION, v as u64) };
+        self
+    }
+
+    pub fn incremental(mut self, v: bool) -> Self {
+        unsafe {
+            bitwuzla_set_option(
+                self.as_raw(),
+                BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST,
+                v as u64,
+            )
+        };
         self
     }
 }

@@ -589,17 +589,25 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         let tm = self.btor.borrow().tm;
         let rm = rounding_mode.to_node(self.btor().clone());
         // TODO: assert width?
-        BV::_new(self.btor.clone(), unsafe {
-            bitwuzla_mk_term2_indexed1(tm, BITWUZLA_KIND_FP_TO_SBV, rm.node, self.node, width)
-        })
+        BV::_new(
+            self.btor.clone(),
+            unsafe {
+                bitwuzla_mk_term2_indexed1(tm, BITWUZLA_KIND_FP_TO_SBV, rm.node, self.node, width)
+            },
+            None,
+        )
     }
 
     pub fn to_ubv(&self, rounding_mode: RoundingMode, width: u64) -> BV<R> {
         let tm = self.btor.borrow().tm;
         let rm = rounding_mode.to_node(self.btor().clone());
-        BV::_new(self.btor.clone(), unsafe {
-            bitwuzla_mk_term2_indexed1(tm, BITWUZLA_KIND_FP_TO_UBV, rm.node, self.node, width)
-        })
+        BV::_new(
+            self.btor.clone(),
+            unsafe {
+                bitwuzla_mk_term2_indexed1(tm, BITWUZLA_KIND_FP_TO_UBV, rm.node, self.node, width)
+            },
+            None,
+        )
     }
 
     pub fn from_ubv(bv: BV<R>, rounding_mode: RoundingMode, ty: &Formats) -> Self {

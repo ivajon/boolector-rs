@@ -261,7 +261,6 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         let fp_sol = self.get_a_solution();
 
         black_box(fp_sol);
-        let string = unsafe { CStr::from_ptr(bitwuzla_term_to_string(self.node)) };
 
         if self.is_const() {
             let string = unsafe { CStr::from_ptr(bitwuzla_term_to_string(self.node)) };
@@ -309,7 +308,7 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
                 break;
             }
             let sol = sol.expect("Preconditions to be valid.");
-            let fp = unsafe { sol.clone().to_bv(self.btor.clone()).to_fp32() };
+            let fp = sol.clone().to_bv(self.btor.clone()).to_fp32();
             self_copy._eq(&fp).not().assert();
 
             if !ret.insert(sol) {
@@ -335,7 +334,7 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
     /// ```
     pub fn as_bv(&self) -> Option<BV<R>> {
         let sol = self.get_a_solution()?;
-        unsafe { Some(sol.to_bv(self.btor.clone())) }
+        Some(sol.to_bv(self.btor.clone()))
     }
 
     /// # Example
@@ -779,7 +778,7 @@ impl FPSolution {
         }
     }
 
-    pub unsafe fn to_bv<R: Borrow<Bitwuzla> + Clone>(self, r: R) -> BV<R> {
+    pub fn to_bv<R: Borrow<Bitwuzla> + Clone>(self, r: R) -> BV<R> {
         let mut ret: Option<BV<R>> = None;
         for char in self.assignment.chars() {
             let addendum = match char {
@@ -828,7 +827,7 @@ impl FPSolution {
         if binary_string.len() > 64 {
             None
         } else {
-            Some(u64::from_str_radix(&binary_string, 2).unwrap_or_else(|e| {
+            Some(u64::from_str_radix(binary_string, 2).unwrap_or_else(|e| {
                 panic!(
                     "Got the following error while trying to parse {:?} as a binary string: {}",
                     binary_string, e

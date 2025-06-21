@@ -1,6 +1,6 @@
 use crate::btor::Bitwuzla;
 use crate::sort::Sort;
-use crate::{Bool, Btor, FP};
+use crate::{Bool, FP};
 use bitwuzla_sys::*;
 use std::borrow::Borrow;
 use std::cell::Cell;
@@ -8,7 +8,6 @@ use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::os::raw::c_char;
-use std::sync::atomic::AtomicU64;
 
 /// A bitvector object: that is, a single symbolic value, consisting of some
 /// number of symbolic bits.
@@ -165,11 +164,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let tm = btor.borrow().tm;
         let sort = Sort::bitvector(btor.clone(), width);
         let term = unsafe { bitwuzla_mk_bv_value_int64(tm, sort.as_raw(), val as i64) };
-        Self::_new(
-            btor,
-            term,
-            Some(unsafe { core::mem::transmute::<_, u32>(val) as u64 }),
-        )
+        Self::_new(btor, term, Some(i32::cast_unsigned(val) as u64))
     }
 
     /// Create a new constant `BV` representing the given unsigned integer.
@@ -190,7 +185,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let sort = Sort::bitvector(btor.clone(), width);
         let node = unsafe { bitwuzla_mk_bv_value_int64(tm, sort.as_raw(), val) };
 
-        Self::_new(btor, node, Some(unsafe { core::mem::transmute(node) }))
+        Self::_new(btor, node, Some(node))
     }
 
     /// Create a new constant `BV` representing the given unsigned integer.

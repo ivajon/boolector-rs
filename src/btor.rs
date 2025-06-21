@@ -1,9 +1,8 @@
 use crate::{Array, BV};
 use bitwuzla_sys::*;
-use libc::wait;
 use std::borrow::Borrow;
 use std::ffi::{CStr, CString};
-use std::fmt;
+use std::fmt::{self, Display};
 
 /// A `Btor` represents an instance of the bitwuzla solver.
 /// Each `BV` and `Array` is created in a particular `Btor` instance.
@@ -362,9 +361,10 @@ impl SolverResult {
             _ => unreachable!(),
         }
     }
-
-    pub fn to_string(&self) -> String {
+}
+impl Display for SolverResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let cstr = unsafe { CStr::from_ptr(bitwuzla_sys::bitwuzla_result_to_string(*self as u32)) };
-        cstr.to_str().unwrap().to_owned()
+        write!(f, "{}", cstr.to_str().unwrap().to_owned())
     }
 }

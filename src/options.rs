@@ -12,7 +12,6 @@ use bitwuzla_sys::{
     BITWUZLA_OPT_LOGLEVEL,
     BITWUZLA_OPT_PRODUCE_MODELS,
     BITWUZLA_OPT_PRODUCE_UNSAT_ASSUMPTIONS,
-    BITWUZLA_OPT_PROP_SEXT,
     BITWUZLA_OPT_TIME_LIMIT_PER,
     BITWUZLA_OPT_VERBOSITY,
 };
@@ -20,6 +19,12 @@ use bitwuzla_sys::{
 use crate::option::*;
 
 pub struct BitwuzlaOptions(*mut bitwuzla_sys::BitwuzlaOptions);
+
+impl Default for BitwuzlaOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl BitwuzlaOptions {
     pub fn new() -> Self {
@@ -97,7 +102,7 @@ impl BitwuzlaOptions {
     }
 
     pub fn reconfigure(self, bw: &crate::Bitwuzla) -> crate::Bitwuzla {
-        let tm = bw.tm.clone();
+        let tm = bw.tm;
         crate::Bitwuzla {
             tm,
             btor: unsafe { bitwuzla_new(bw.tm, self.0) },

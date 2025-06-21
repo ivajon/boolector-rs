@@ -11,8 +11,8 @@ keywords = ["boolector", "bitwuzla", "smt", "ffi", "bindings"]
 license = "MIT"
 
 [dependencies]
-# bitwuzla-sys = "0.2.0"
-bitwuzla-sys = { git = "https://github.com/ivajon/bitwuzla-sys", branch="test-libc++" }
+# bitwuzla-sys = "0.7.0"
+bitwuzla-sys = { git = "https://github.com/ivajon/bitwuzla-sys", branch="version_bump/v0.8" }
 libc = "0.2.73"
 
 [features]

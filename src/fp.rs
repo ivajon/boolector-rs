@@ -291,7 +291,7 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
             return None;
         }
 
-        let bv_val = unsafe { bitwuzla_get_value(btor.as_raw(), self.node) };
+        let bv_val = unsafe { bitwuzla_get_value(btor.as_models(), self.node) };
         let bv_str = unsafe { bitwuzla_term_value_get_str(bv_val) };
         Some(FPSolution::from_raw(bv_str))
     }

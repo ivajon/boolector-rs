@@ -431,7 +431,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
     pub fn get_a_solution(&self) -> BVSolution {
         let btor: &Bitwuzla = self.btor.borrow();
 
-        let bv_val = unsafe { bitwuzla_get_value(btor.as_raw(), self.node) };
+        let bv_val = unsafe { bitwuzla_get_value(btor.as_models(), self.node) };
         let bv_str = unsafe { bitwuzla_term_value_get_str(bv_val) };
         BVSolution::from_raw(bv_str)
     }

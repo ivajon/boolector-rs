@@ -19,6 +19,7 @@ use bitwuzla_sys::{
 
 use crate::option::*;
 
+#[derive(Clone)]
 pub struct BitwuzlaOptions(*mut bitwuzla_sys::BitwuzlaOptions);
 
 impl BitwuzlaOptions {
@@ -30,12 +31,12 @@ impl BitwuzlaOptions {
         crate::Bitwuzla::new_from_options(self)
     }
 
-    pub(crate) fn as_raw(&mut self) -> *mut bitwuzla_sys::BitwuzlaOptions {
+    pub(crate) fn as_raw(&self) -> *mut bitwuzla_sys::BitwuzlaOptions {
         self.0
     }
 
     pub fn with_model_gen(self) -> Self {
-        self.model_gen(ModelGen::All)
+        self.model_gen(ModelGen::Asserted)
     }
 
     pub fn logging(self, lvl: LogLevel) -> Self {
@@ -98,9 +99,11 @@ impl BitwuzlaOptions {
 
     pub fn reconfigure(self, bw: &crate::Bitwuzla) -> crate::Bitwuzla {
         let tm = bw.tm.clone();
+        let opt2 = self.clone().with_model_gen();
         crate::Bitwuzla {
             tm,
             btor: unsafe { bitwuzla_new(bw.tm, self.0) },
+            btor_with_models: unsafe { bitwuzla_new(bw.tm, opt2.0) },
         }
     }
 
@@ -125,7 +128,7 @@ impl BitwuzlaOptions {
         let val = match se {
             SolverEngine::Fun => "fun",
             SolverEngine::SLS => "sls",
-            SolverEngine::Prop => "prop",
+            SolverEngine::Prop => "preprop",
             SolverEngine::AIGProp => "aigprop",
             SolverEngine::Quant => "quant",
         };
@@ -231,7 +234,7 @@ impl BitwuzlaOptions {
 impl Drop for BitwuzlaOptions {
     fn drop(&mut self) {
         unsafe {
-            bitwuzla_options_delete(self.as_raw());
+            // bitwuzla_options_delete(self.as_raw());
         }
     }
 }

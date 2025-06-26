@@ -1,6 +1,5 @@
 use crate::{Array, BV};
 use bitwuzla_sys::*;
-use libc::wait;
 use std::borrow::Borrow;
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -10,6 +9,7 @@ use std::fmt;
 pub struct Bitwuzla {
     pub(crate) tm: *mut bitwuzla_sys::BitwuzlaTermManager,
     pub(crate) btor: *mut bitwuzla_sys::Bitwuzla,
+    pub(crate) btor_with_models: *mut bitwuzla_sys::Bitwuzla,
 }
 
 pub type Btor = Bitwuzla;
@@ -48,11 +48,13 @@ impl Bitwuzla {
         crate::BitwuzlaOptions::new()
     }
 
-    pub(crate) fn new_from_options(mut options: crate::BitwuzlaOptions) -> Self {
+    pub(crate) fn new_from_options(options: crate::BitwuzlaOptions) -> Self {
         let tm = unsafe { bitwuzla_term_manager_new() };
+        let opt2 = options.clone().with_model_gen();
         Self {
             tm,
             btor: unsafe { bitwuzla_new(tm, options.as_raw()) },
+            btor_with_models: unsafe { bitwuzla_new(tm, opt2.as_raw()) },
         }
     }
 
@@ -105,12 +107,15 @@ impl Bitwuzla {
     /// assert_eq!(btor.sat(), SolverResult::Unknown);
     /// ```
     pub fn sat(&self) -> SolverResult {
-        let result = unsafe { bitwuzla_check_sat(self.as_raw()) };
+        let result = unsafe { bitwuzla_check_sat(self.as_models()) };
         SolverResult::from_raw(result)
     }
 
+    pub(crate) fn as_models(&self) -> *mut bitwuzla_sys::Bitwuzla {
+        self.btor_with_models
+    }
     pub fn is_sat(&self) -> bool {
-        let result = unsafe { bitwuzla_check_sat(self.as_raw()) };
+        let result = unsafe { bitwuzla_check_sat(self.as_models()) };
         SolverResult::from_raw(result) == SolverResult::Sat
     }
 
@@ -137,7 +142,7 @@ impl Bitwuzla {
         let assumptions = assumptions.iter().map(|x| x.node).collect::<Vec<_>>();
         let result = unsafe {
             bitwuzla_check_sat_assuming(
-                self.as_raw(),
+                self.as_models(),
                 assumptions.len() as u32,
                 assumptions.as_ptr() as *mut _,
             )
@@ -147,12 +152,14 @@ impl Bitwuzla {
 
     /// Push `n` context levels. `n` must be at least 1.
     pub fn push(&self, n: u64) {
-        unsafe { bitwuzla_push(self.as_raw(), n) }
+        unsafe { bitwuzla_push(self.as_raw(), n) };
+        unsafe { bitwuzla_push(self.as_models(), n) }
     }
 
     /// Pop `n` context levels. `n` must be at least 1.
     pub fn pop(&self, n: u64) {
-        unsafe { bitwuzla_pop(self.as_raw(), n) }
+        unsafe { bitwuzla_pop(self.as_raw(), n) };
+        unsafe { bitwuzla_pop(self.as_models(), n) }
     }
 
     /// Given a `BV` originally created for any `Btor`, get the corresponding
@@ -327,7 +334,7 @@ impl Bitwuzla {
 
     pub fn assert<R: Borrow<Bitwuzla> + Clone>(stmt: crate::Bool<R>) {
         let ptr: &Self = stmt.btor.borrow();
-        let btor = ptr.btor;
+        let btor = ptr.btor_with_models;
         unsafe { bitwuzla_assert(btor, stmt.node) };
     }
 }

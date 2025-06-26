@@ -112,7 +112,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Bool<R> {
     ///
     /// For a code example, see [`BV::new()`](struct.BV.html#method.new).
     pub fn get_a_solution(&self) -> bool {
-        let bv_val = unsafe { bitwuzla_get_value(self.btor.borrow().as_raw(), self.node) };
+        let bv_val = unsafe { bitwuzla_get_value(self.btor.borrow().as_models(), self.node) };
         unsafe { bitwuzla_term_value_get_bool(bv_val) }
     }
 
@@ -189,7 +189,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Bool<R> {
     /// assert_eq!(btor.sat(), SolverResult::Unsat);
     /// ```
     pub fn assert(&self) {
-        unsafe { bitwuzla_assert(self.btor.borrow().as_raw(), self.node) }
+        unsafe { bitwuzla_assert(self.btor.borrow().as_models(), self.node) }
     }
 
     binop!(
@@ -321,7 +321,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Bool<R> {
     /// assert!(assumption.is_failed_assumption());
     /// ```
     pub fn is_failed_assumption(&self) -> bool {
-        unsafe { bitwuzla_is_unsat_assumption(self.btor.borrow().as_raw(), self.node) }
+        unsafe { bitwuzla_is_unsat_assumption(self.btor.borrow().as_models(), self.node) }
     }
 }
 impl<R: Borrow<Bitwuzla> + Clone> Clone for Bool<R> {

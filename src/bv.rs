@@ -164,7 +164,7 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         let tm = btor.borrow().tm;
         let sort = Sort::bitvector(btor.clone(), width);
         let term = unsafe { bitwuzla_mk_bv_value_int64(tm, sort.as_raw(), val as i64) };
-        Self::_new(btor, term, Some(i32::cast_unsigned(val) as u64))
+        Self::_new(btor, term, Some(val as u64))
     }
 
     /// Create a new constant `BV` representing the given unsigned integer.

@@ -24,7 +24,8 @@ pub struct BitwuzlaOptions(*mut bitwuzla_sys::BitwuzlaOptions);
 
 impl BitwuzlaOptions {
     pub fn new() -> Self {
-        Self(unsafe { bitwuzla_options_new() })
+        let ret = Self(unsafe { bitwuzla_options_new() });
+        ret
     }
 
     pub fn build(self) -> crate::Bitwuzla {
@@ -133,7 +134,6 @@ impl BitwuzlaOptions {
             SolverEngine::Quant => "quant",
         };
         let val = CString::new(val).unwrap();
-        println!("Setting solver!");
         unsafe {
             bitwuzla_set_option_mode(
                 self.as_raw(),
@@ -141,7 +141,6 @@ impl BitwuzlaOptions {
                 val.as_c_str().as_ptr(),
             );
         }
-        println!("Set solver!");
         self
     }
 

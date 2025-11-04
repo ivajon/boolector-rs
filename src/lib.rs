@@ -16,6 +16,7 @@ pub use rounding_mode::{RoundingMode, RoundingModeNode};
 pub mod option;
 pub mod options;
 pub use options::BitwuzlaOptions;
+pub mod lambda;
 mod sort;
 
 /// Enumerates the errors that may occur when using these bindings.

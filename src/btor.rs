@@ -50,7 +50,9 @@ impl Bitwuzla {
 
     pub(crate) fn new_from_options(options: crate::BitwuzlaOptions) -> Self {
         let tm = unsafe { bitwuzla_term_manager_new() };
-        let opt2 = options.clone().with_model_gen();
+        let opt2 = crate::BitwuzlaOptions::new()
+            .with_model_gen()
+            .rewrite_level(crate::option::RewriteLevel::More);
         Self {
             tm,
             btor: unsafe { bitwuzla_new(tm, options.as_raw()) },
@@ -317,7 +319,7 @@ impl Bitwuzla {
     ///       simplifies the input formula as a preprocessing step. It is not
     ///       necessary to call this function explicitly in the general case.
     pub fn simplify(&self) {
-        unsafe { bitwuzla_simplify(self.as_raw()) };
+        // unsafe { bitwuzla_simplify(self.as_raw()) };
     }
 
     /// Get bitwuzla's version string

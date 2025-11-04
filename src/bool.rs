@@ -66,10 +66,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Bool<R> {
     }
 
     pub(crate) fn _new(btor: R, node: BitwuzlaTerm) -> Self {
-        Self {
-            btor,
-            node: unsafe { bitwuzla_term_copy(node) },
-        }
+        Self { btor, node }
     }
 
     /// Create a new constant `BV` representing the given `bool` (either constant

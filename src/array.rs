@@ -91,10 +91,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Array<R> {
     }
 
     pub(crate) fn _new(btor: R, node: BitwuzlaTerm) -> Self {
-        Self {
-            btor,
-            node: unsafe { bitwuzla_term_copy(node) },
-        }
+        Self { btor, node }
     }
 
     /// Create a new `Array` which maps `BV`s of width `index_width` to `BV`s of

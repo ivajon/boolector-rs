@@ -4,6 +4,7 @@ use crate::{Bool, Btor, FP};
 use bitwuzla_sys::*;
 use std::borrow::Borrow;
 use std::cell::Cell;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -142,10 +143,30 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
         }
     }
 
+    pub(crate) fn param(btor: R, width: u64) -> Self {
+        let tm = btor.borrow().tm;
+        let sort = Sort::bitvector(btor.clone(), width);
+        // Create a VARIABLE node for lambda parameters
+        let v = unsafe { bitwuzla_mk_var(tm, sort.as_raw(), std::ptr::null()) };
+        // Optionally check width soon after by using v in a BV context (the body will enforce it).
+        BV {
+            btor,
+            node: v,
+            c: Cell::new(None),
+        }
+    }
+
+    pub fn resize_unsigned(&self, width: u64) -> Self {
+        match self.get_width().cmp(&width) {
+            Ordering::Equal => self.clone(),
+            Ordering::Less => self.uext(width - self.get_width()),
+            Ordering::Greater => self.slice(0, width - 1),
+        }
+    }
     pub(crate) fn _new(btor: R, bv: BitwuzlaTerm, c: Option<u64>) -> Self {
         Self {
             btor,
-            node: unsafe { bitwuzla_term_copy(bv) },
+            node: bv,
             c: Cell::new(c),
         }
     }
@@ -948,10 +969,13 @@ impl<R: Borrow<Bitwuzla> + Clone> BV<R> {
     }
 
     pub fn cond_bv(&self, t: &BV<R>, e: &BV<R>) -> Self {
+        let zero = Self::from_bool(self.btor.clone(), false).resize_unsigned(self.get_width());
+        let val = self._ne(&zero);
+
         let tm = self.btor.borrow().tm;
         Self::_new(
             self.btor.clone(),
-            unsafe { bitwuzla_mk_term3(tm, BITWUZLA_KIND_ITE, self.node, t.node, e.node) },
+            unsafe { bitwuzla_mk_term3(tm, BITWUZLA_KIND_ITE, val.node, t.node, e.node) },
             None,
         )
     }

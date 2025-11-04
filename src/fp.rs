@@ -199,7 +199,7 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
     pub(crate) fn _new(btor: R, node: BitwuzlaTerm) -> Self {
         Self {
             btor: btor.clone(),
-            node: unsafe { bitwuzla_term_copy(node) },
+            node,
         }
     }
 

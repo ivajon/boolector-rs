@@ -18,12 +18,12 @@ impl RoundingMode {
     pub fn to_node<R: Borrow<Bitwuzla> + Clone>(&self, btor: R) -> RoundingModeNode<R> {
         let tm = btor.borrow().tm;
         let rm = match self {
-            RoundingMode::Max => BITWUZLA_RM_MAX,
-            RoundingMode::RNA => BITWUZLA_RM_RNA,
-            RoundingMode::RNE => BITWUZLA_RM_RNE,
-            RoundingMode::RTN => BITWUZLA_RM_RTN,
-            RoundingMode::RTP => BITWUZLA_RM_RTP,
-            RoundingMode::RTZ => BITWUZLA_RM_RTZ,
+            Self::Max => BITWUZLA_RM_MAX,
+            Self::RNA => BITWUZLA_RM_RNA,
+            Self::RNE => BITWUZLA_RM_RNE,
+            Self::RTN => BITWUZLA_RM_RTN,
+            Self::RTP => BITWUZLA_RM_RTP,
+            Self::RTZ => BITWUZLA_RM_RTZ,
         };
         let node = unsafe { bitwuzla_mk_rm_value(tm, rm) };
         RoundingModeNode { btor, node }

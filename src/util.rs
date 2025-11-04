@@ -1,6 +1,6 @@
 use libc::c_void;
 
-pub(crate) fn tmp_file_to_string<F: FnOnce(*mut libc::FILE)>(f: F, limit_length: bool) -> String {
+pub fn tmp_file_to_string<F: FnOnce(*mut libc::FILE)>(f: F, limit_length: bool) -> String {
     const MAX_LENGTH: i64 = 2000; // If the text representation of the `Array` exceeds this length, subsitute a placeholder instead
     unsafe {
         let tmpfile: *mut libc::FILE = libc::tmpfile();

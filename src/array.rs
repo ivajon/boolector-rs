@@ -71,6 +71,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Array<R> {
     /// arr2.read(&four)._eq(&two).assert();
     /// assert_eq!(btor.sat(), SolverResult::Sat);
     /// ```
+    #[allow(clippy::option_if_let_else)]
     pub fn new(btor: R, index_width: u64, element_width: u64, symbol: Option<&str>) -> Self {
         let tm = btor.borrow().tm;
         let index_sort = Sort::bitvector(btor.clone(), index_width);
@@ -79,18 +80,17 @@ impl<R: Borrow<Bitwuzla> + Clone> Array<R> {
         let kind =
             unsafe { bitwuzla_mk_array_sort(tm, index_sort.as_raw(), element_sort.as_raw()) };
 
-        let node = match symbol {
-            None => unsafe { bitwuzla_mk_const(tm, kind, CString::new("").unwrap().as_ptr()) },
-            Some(symbol) => {
-                let cstring = CString::new(symbol).unwrap();
-                let symbol = cstring.as_ptr() as *const libc::c_char;
-                unsafe { bitwuzla_mk_const(tm, kind, symbol) }
-            },
+        let node = if let Some(symbol) = symbol {
+            let cstring = CString::new(symbol).unwrap();
+            let symbol = cstring.as_ptr() as *const libc::c_char;
+            unsafe { bitwuzla_mk_const(tm, kind, symbol) }
+        } else {
+            unsafe { bitwuzla_mk_const(tm, kind, CString::new("").unwrap().as_ptr()) }
         };
         Self::_new(btor, node)
     }
 
-    pub(crate) fn _new(btor: R, node: BitwuzlaTerm) -> Self {
+    pub(crate) const fn _new(btor: R, node: BitwuzlaTerm) -> Self {
         Self { btor, node }
     }
 
@@ -180,7 +180,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Array<R> {
     }
 
     /// Array equality. `self` and `other` must have the same index and element widths.
-    pub fn _eq(&self, other: &Array<R>) -> BV<R> {
+    pub fn _eq(&self, other: &Self) -> BV<R> {
         let tm = self.btor.borrow().tm;
         BV::_new(
             self.btor.clone(),
@@ -190,7 +190,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Array<R> {
     }
 
     /// Array inequality. `self` and `other` must have the same index and element widths.
-    pub fn _ne(&self, other: &Array<R>) -> BV<R> {
+    pub fn _ne(&self, other: &Self) -> BV<R> {
         let tm = self.btor.borrow().tm;
         BV::_new(
             self.btor.clone(),

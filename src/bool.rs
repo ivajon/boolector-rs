@@ -51,21 +51,21 @@ impl<R: Borrow<Bitwuzla> + Clone> Bool<R> {
     ///
     /// The `symbol`, if present, will be used to identify the `BV` when printing
     /// a model or dumping to file. It must be unique if it is present.
+    #[allow(clippy::option_if_let_else)]
     pub fn new(btor: R, symbol: Option<&str>) -> Self {
         let tm = btor.borrow().tm;
         let sort = Sort::bool(btor.clone());
-        let node = match symbol {
-            None => unsafe { bitwuzla_mk_const(tm, sort.as_raw(), std::ptr::null()) },
-            Some(symbol) => {
-                let cstring = CString::new(symbol).unwrap();
-                let symbol = cstring.as_ptr() as *const c_char;
-                unsafe { bitwuzla_mk_const(tm, sort.as_raw(), symbol) }
-            },
+        let node = if let Some(symbol) = symbol {
+            let cstring = CString::new(symbol).unwrap();
+            let symbol = cstring.as_ptr() as *const c_char;
+            unsafe { bitwuzla_mk_const(tm, sort.as_raw(), symbol) }
+        } else {
+            unsafe { bitwuzla_mk_const(tm, sort.as_raw(), std::ptr::null()) }
         };
         Self { btor, node }
     }
 
-    pub(crate) fn _new(btor: R, node: BitwuzlaTerm) -> Self {
+    pub(crate) const fn _new(btor: R, node: BitwuzlaTerm) -> Self {
         Self { btor, node }
     }
 

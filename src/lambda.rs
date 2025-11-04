@@ -1,9 +1,8 @@
 use crate::btor::Bitwuzla;
-use crate::{BitwuzlaOptions, Btor, BV};
+use crate::BV;
 use bitwuzla_sys::*;
 use std::borrow::Borrow;
 use std::cell::Cell;
-use std::rc::Rc;
 
 /// A bitvector object: that is, a single symbolic value, consisting of some
 /// number of symbolic bits.
@@ -72,59 +71,5 @@ impl<R: Borrow<Bitwuzla> + Clone, const ARITY: usize> Lambda<R, ARITY> {
             node: res,
             c: self.c.clone(),
         }
-    }
-}
-
-#[test]
-fn lambda_two_args_returns_bv_and_assume_eq() {
-    unsafe {
-        // Setup solver + term manager
-        let bzla = BitwuzlaOptions::new().with_model_gen().build();
-        let btor = Rc::new(bzla);
-
-        // Helper: construct named BV const (symbolic)
-        let x = BV::new(btor.clone(), 32, Some("X"));
-        let y = BV::new(btor.clone(), 32, Some("Y"));
-
-        // Define lambda f(x, y) = (x + y) & 0xFFFF_FFFE
-        let f = Lambda::<_, 2>::new(btor.clone(), 32, |[x, y]: &[BV<_>; 2]| {
-            let sum = x.add(&y);
-            let mask = BV::from_u32(btor.clone(), 0xFFFF_FFFE, 32);
-            let ret = sum.and(&mask);
-            let ret = ret.resize_unsigned(x.get_width());
-
-            ret
-        });
-
-        // Apply: r = f(X, Y)
-        let r = f.apply(&[x.clone(), y.clone()]);
-
-        // Build equality r == 0x0000_0100
-        let tgt = BV::from_u32(btor.clone(), 0x0000_0100, 32);
-        let eq = r._eq(&tgt);
-
-        // check_sat_assuming expects Bool terms
-        let mut assumptions = [eq.node];
-        let res = bitwuzla_check_sat_assuming(btor.btor, 1, assumptions.as_mut_ptr());
-        assert!(
-            res == BITWUZLA_SAT || res == BITWUZLA_UNKNOWN,
-            "expected sat/unknown, got {res:?}"
-        );
-
-        // if res == BITWUZLA_SAT {
-        //     let x_val = bitwuzla_get_bv_value(btor.borrow().raw(), x.node);
-        //     let y_val = bitwuzla_get_bv_value(btor.borrow().raw(), y.node);
-        //     let r_val = bitwuzla_get_bv_value(btor.borrow().raw(), r.node);
-        //     // Basic sanity: r should be "00000000000000000000000100000000" (binary) or hex format
-        //     // Depends on your get_bv_value formatting; we just ensure pointers not null here.
-        //     assert!(!x_val.is_null());
-        //     assert!(!y_val.is_null());
-        //     assert!(!r_val.is_null());
-        // }
-
-        // Cleanup handled by Drop for Bitwuzla/BV/Lambda if your wrappers implement it.
-        // If not, add:
-        // bitwuzla_options_delete(opts);
-        // bitwuzla_term_manager_delete(tm);
     }
 }

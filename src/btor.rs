@@ -60,7 +60,7 @@ impl Bitwuzla {
         }
     }
 
-    pub(crate) fn as_raw(&self) -> *mut bitwuzla_sys::Bitwuzla {
+    pub(crate) const fn as_raw(&self) -> *mut bitwuzla_sys::Bitwuzla {
         self.btor
     }
 
@@ -113,7 +113,7 @@ impl Bitwuzla {
         SolverResult::from_raw(result)
     }
 
-    pub(crate) fn as_models(&self) -> *mut bitwuzla_sys::Bitwuzla {
+    pub(crate) const fn as_models(&self) -> *mut bitwuzla_sys::Bitwuzla {
         self.btor_with_models
     }
     pub fn is_sat(&self) -> bool {
@@ -137,7 +137,7 @@ impl Bitwuzla {
     /// assert_eq!(foo.get_a_solution().as_u64().unwrap(), 127);
     /// assert_eq!(btor.check_sat_assuming(&[is_42, is_127]), SolverResult::Unsat);
     /// ```
-    pub fn check_sat_assuming<R: Borrow<Bitwuzla> + Clone>(
+    pub fn check_sat_assuming<R: Borrow<Self> + Clone>(
         &self,
         assumptions: &[crate::BV<R>],
     ) -> SolverResult {
@@ -146,7 +146,7 @@ impl Bitwuzla {
             bitwuzla_check_sat_assuming(
                 self.as_models(),
                 assumptions.len() as u32,
-                assumptions.as_ptr() as *mut _,
+                assumptions.as_ptr().cast_mut(),
             )
         };
         SolverResult::from_raw(result)
@@ -175,7 +175,7 @@ impl Bitwuzla {
     /// For a code example, see
     /// [`Btor::duplicate()`](struct.Btor.html#method.duplicate).
     #[allow(clippy::if_same_then_else)]
-    pub fn get_matching_bv<R: Borrow<Bitwuzla> + Clone>(_btor: R, _bv: &BV<R>) -> Option<BV<R>> {
+    pub fn get_matching_bv<R: Borrow<Self> + Clone>(_btor: R, _bv: &BV<R>) -> Option<BV<R>> {
         unimplemented!()
         /*
         let node = unsafe { bitwuzla_match_node(btor.borrow().as_raw(), bv.node) };
@@ -197,7 +197,7 @@ impl Bitwuzla {
     ///
     /// It's also fine to call this with an `Array` created for the given `Btor`
     /// itself, in which case you'll just get back `Some(array.clone())`.
-    pub fn get_matching_array<R: Borrow<Bitwuzla> + Clone>(
+    pub fn get_matching_array<R: Borrow<Self> + Clone>(
         _btor: R,
         _array: &Array<R>,
     ) -> Option<Array<R>> {
@@ -220,7 +220,7 @@ impl Bitwuzla {
     /// their symbols, this can also be used to find the copied version of a
     /// given `BV` in the new `Btor`.
     #[allow(clippy::if_same_then_else)]
-    pub fn get_bv_by_symbol<R: Borrow<Bitwuzla> + Clone>(_btor: R, _symbol: &str) -> Option<BV<R>> {
+    pub fn get_bv_by_symbol<R: Borrow<Self> + Clone>(_btor: R, _symbol: &str) -> Option<BV<R>> {
         unimplemented!()
         /*
         let cstring = CString::new(symbol).unwrap();
@@ -242,7 +242,7 @@ impl Bitwuzla {
     /// Since `Btor::duplicate()` copies all `Array`s to the new `Btor` including
     /// their symbols, this can also be used to find the copied version of a
     /// given `Array` in the new `Btor`.
-    pub fn get_array_by_symbol<R: Borrow<Bitwuzla> + Clone>(
+    pub fn get_array_by_symbol<R: Borrow<Self> + Clone>(
         _btor: R,
         _symbol: &str,
     ) -> Option<Array<R>> {
@@ -284,7 +284,7 @@ impl Bitwuzla {
         )
     }
 
-    pub fn from_formula(_formula: &str) -> Option<Bitwuzla> {
+    pub fn from_formula(_formula: &str) -> Option<Self> {
         // T=OP
         //
         todo!("call https://bitwuzla.github.io/docs/c/types/bitwuzlaparser.html#_CPPv421bitwuzla_parser_parseP14BitwuzlaParserPKcbbPPKc");
@@ -313,15 +313,6 @@ impl Bitwuzla {
         todo!()
     }
 
-    /// Simplify the current input formula.
-    ///
-    /// NOTE: Each call to `sat()` and `check_sat_assuming()`
-    ///       simplifies the input formula as a preprocessing step. It is not
-    ///       necessary to call this function explicitly in the general case.
-    pub fn simplify(&self) {
-        // unsafe { bitwuzla_simplify(self.as_raw()) };
-    }
-
     /// Get bitwuzla's version string
     pub fn get_version(&self) -> String {
         let cstr = unsafe { CStr::from_ptr(bitwuzla_version()) };
@@ -334,7 +325,7 @@ impl Bitwuzla {
         cstr.to_str().unwrap().to_owned()
     }
 
-    pub fn assert<R: Borrow<Bitwuzla> + Clone>(stmt: crate::Bool<R>) {
+    pub fn assert<R: Borrow<Self> + Clone>(stmt: crate::Bool<R>) {
         let ptr: &Self = stmt.btor.borrow();
         let btor = ptr.btor_with_models;
         unsafe { bitwuzla_assert(btor, stmt.node) };
@@ -363,17 +354,18 @@ pub enum SolverResult {
 }
 
 impl SolverResult {
-    fn from_raw(result: bitwuzla_sys::BitwuzlaResult) -> Self {
+    const fn from_raw(result: bitwuzla_sys::BitwuzlaResult) -> Self {
         match result {
-            BITWUZLA_SAT => SolverResult::Sat,
-            BITWUZLA_UNSAT => SolverResult::Unsat,
-            BITWUZLA_UNKNOWN => SolverResult::Unknown,
+            BITWUZLA_SAT => Self::Sat,
+            BITWUZLA_UNSAT => Self::Unsat,
+            BITWUZLA_UNKNOWN => Self::Unknown,
             _ => unreachable!(),
         }
     }
-
-    pub fn to_string(&self) -> String {
+}
+impl std::fmt::Display for SolverResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let cstr = unsafe { CStr::from_ptr(bitwuzla_sys::bitwuzla_result_to_string(*self as u32)) };
-        cstr.to_str().unwrap().to_owned()
+        write!(f, "{}", cstr.to_str().unwrap().to_owned())
     }
 }

@@ -12,11 +12,11 @@ pub struct Sort<R: Borrow<Bitwuzla> + Clone> {
 }
 
 impl<R: Borrow<Bitwuzla> + Clone> Sort<R> {
-    pub(crate) fn from_raw(btor: R, sort: BitwuzlaSort) -> Self {
+    pub(crate) const fn from_raw(btor: R, sort: BitwuzlaSort) -> Self {
         Self { btor, sort }
     }
 
-    pub(crate) fn as_raw(&self) -> BitwuzlaSort {
+    pub(crate) const fn as_raw(&self) -> BitwuzlaSort {
         self.sort
     }
 
@@ -57,7 +57,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Sort<R> {
     /// which maps items of the `index` sort to the `element` sort.
     ///
     /// Both the `index` and `element` sorts must be bitvector sorts.
-    pub fn array(btor: R, index: &Sort<R>, element: &Sort<R>) -> Self {
+    pub fn array(btor: R, index: &Self, element: &Self) -> Self {
         let tm = btor.borrow().tm;
         Self::from_raw(btor, unsafe {
             bitwuzla_mk_array_sort(tm, index.as_raw(), element.as_raw())
@@ -92,7 +92,7 @@ impl<R: Borrow<Bitwuzla> + Clone> Sort<R> {
 
 impl<R: Borrow<Bitwuzla> + Clone> Clone for Sort<R> {
     fn clone(&self) -> Self {
-        Sort {
+        Self {
             btor: self.btor.clone(),
             sort: unsafe { bitwuzla_sort_copy(self.as_raw()) },
         }

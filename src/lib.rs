@@ -1,3 +1,5 @@
+#![deny(clippy::all, clippy::perf, clippy::nursery)]
+#![allow(clippy::missing_safety_doc)]
 mod btor;
 pub use btor::Btor;
 pub use btor::{Bitwuzla, SolverResult};

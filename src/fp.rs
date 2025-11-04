@@ -196,11 +196,8 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         Ok(Self { btor, node })
     }
 
-    pub(crate) fn _new(btor: R, node: BitwuzlaTerm) -> Self {
-        Self {
-            btor: btor.clone(),
-            node,
-        }
+    pub(crate) const fn _new(btor: R, node: BitwuzlaTerm) -> Self {
+        Self { btor, node }
     }
 
     /// Create a new constant `FP` representing the given floating point value.
@@ -221,7 +218,7 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         BV::from_u64(btor, val.to_bits(), 64).to_fp(ty.exponent(), ty.fraction())
     }
 
-    pub fn btor(&self) -> &R {
+    pub const fn btor(&self) -> &R {
         &self.btor
     }
 
@@ -261,7 +258,6 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         let fp_sol = self.get_a_solution();
 
         black_box(fp_sol);
-        let string = unsafe { CStr::from_ptr(bitwuzla_term_to_string(self.node)) };
 
         if self.is_const() {
             let string = unsafe { CStr::from_ptr(bitwuzla_term_to_string(self.node)) };
@@ -580,7 +576,7 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         let tm = bv.borrow().btor.borrow().tm;
         let (e, s) = (ty.exponent(), ty.fraction());
         // TODO: assert width?
-        FP::_new(bv.btor.clone(), unsafe {
+        Self::_new(bv.btor.clone(), unsafe {
             bitwuzla_mk_term1_indexed2(tm, BITWUZLA_KIND_FP_TO_FP_FROM_BV, bv.node, e, s)
         })
     }
@@ -613,7 +609,7 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
     pub fn from_ubv(bv: BV<R>, rounding_mode: RoundingMode, ty: &Formats) -> Self {
         let tm = bv.btor.borrow().tm;
         let rm = rounding_mode.to_node(bv.btor.clone());
-        FP::_new(bv.btor.clone(), unsafe {
+        Self::_new(bv.btor.clone(), unsafe {
             bitwuzla_mk_term2_indexed2(
                 tm,
                 BITWUZLA_KIND_FP_TO_FP_FROM_UBV,
@@ -628,7 +624,7 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
     pub fn from_sbv(bv: BV<R>, rounding_mode: RoundingMode, ty: &Formats) -> Self {
         let tm = bv.btor.borrow().tm;
         let rm = rounding_mode.to_node(bv.btor.clone());
-        FP::_new(bv.btor.clone(), unsafe {
+        Self::_new(bv.btor.clone(), unsafe {
             bitwuzla_mk_term2_indexed2(
                 tm,
                 BITWUZLA_KIND_FP_TO_FP_FROM_SBV,
@@ -640,19 +636,19 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         })
     }
 
-    pub fn to_fp32(&self) -> FP<R> {
+    pub fn to_fp32(&self) -> Self {
         self.to_fp(8, 23 + 1)
     }
 
-    pub fn to_fp64(&self) -> FP<R> {
+    pub fn to_fp64(&self) -> Self {
         self.to_fp(11, 52 + 1)
     }
 
-    pub fn unconstrained(&self, ty: &Formats, name: Option<&str>) -> Result<FP<R>, FPError> {
+    pub fn unconstrained(&self, ty: &Formats, name: Option<&str>) -> Result<Self, FPError> {
         let tm = self.btor.borrow().tm;
         let sort = Sort::fp(self.btor.clone(), ty.exponent(), ty.fraction());
 
-        Ok(FP::_new(
+        Ok(Self::_new(
             self.btor.clone(),
             match name {
                 None => unsafe { bitwuzla_mk_const(tm, sort.as_raw(), core::ptr::null()) },
@@ -665,9 +661,9 @@ impl<R: Borrow<Bitwuzla> + Clone> FP<R> {
         ))
     }
 
-    pub fn to_fp(&self, exp_width: u64, sig_width: u64) -> FP<R> {
+    pub fn to_fp(&self, exp_width: u64, sig_width: u64) -> Self {
         let tm = self.btor.borrow().tm;
-        FP::_new(self.btor.clone(), unsafe {
+        Self::_new(self.btor.clone(), unsafe {
             bitwuzla_mk_term1_indexed2(
                 tm,
                 BITWUZLA_KIND_FP_TO_FP_FROM_FP,
@@ -828,7 +824,7 @@ impl FPSolution {
         if binary_string.len() > 64 {
             None
         } else {
-            Some(u64::from_str_radix(&binary_string, 2).unwrap_or_else(|e| {
+            Some(u64::from_str_radix(binary_string, 2).unwrap_or_else(|e| {
                 panic!(
                     "Got the following error while trying to parse {:?} as a binary string: {}",
                     binary_string, e
